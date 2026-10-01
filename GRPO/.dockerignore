@@ -1,0 +1,11 @@
+# Build context is GRPO/. Secrets live in ../.env, outside the context, and never enter
+# the image; they arrive as the grpo-env Secret at runtime.
+.env
+.env.*
+__pycache__/
+**/__pycache__/
+tests/
+k8s/
+*.md
+.DS_Store
+example/

@@ -1,1 +1,13 @@
 .DS_Store
+
+# Secrets live in .env files at any depth (./.env, GRPO/example/.env, ...); patterns
+# without a slash match in every directory. Only the placeholder templates are tracked.
+.env
+.env.*
+!.env.example
+
+# Generated task set (rebuild with ./run.sh data)
+GRPO/data/
+
+__pycache__/
+*.py[cod]

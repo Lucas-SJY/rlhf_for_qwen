@@ -1,0 +1,77 @@
+# GRPO training Job: one pod, one A100-80GB. Same pattern as ../../train/k8s/job.yaml.
+#
+# Do not apply this file by hand -- ../run.sh substitutes ${IMAGE}, ${JOB_NAME},
+# ${SFT_PVC_NAME} and ${RL_PVC_NAME}, and creates the Secrets it depends on:
+#   ./run.sh submit     just (re)submit
+#   ./run.sh            data + image + secrets + pvc + submit + logs
+#
+# Hyperparameters and keys arrive through the grpo-env Secret (envFrom); this file only
+# describes hardware and volumes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+spec:
+  backoffLimit: 2              # an evicted pod resumes from the last checkpoint
+  ttlSecondsAfterFinished: 604800
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: nrp-registry
+      # 80GB cards only: vLLM (8B weights + KV cache for a whole GRPO batch) and the fp32
+      # LoRA actor take turns on the same GPU, and each needs most of the card.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nvidia.com/gpu.product
+                    operator: In
+                    values:
+                      - NVIDIA-A100-SXM4-80GB
+                      - NVIDIA-A100-80GB-PCIe
+      containers:
+        - name: trainer
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          command: ["bash", "/workspace/src/entrypoint.sh"]
+          envFrom:
+            - secretRef:
+                name: grpo-env
+          # Host memory holds whatever is not on the GPU at the moment: the offloaded fp32
+          # actor (~33G), vLLM's sleeping weights (~16G), the Ray object store (/dev/shm,
+          # 16G) and the Ray worker processes. There is no critic.
+          # NRP policy: cpu limit/request ratio <= 1.2 and GPU requests == limits; keep all
+          # equal.
+          resources:
+            requests:
+              nvidia.com/a100: 1
+              cpu: "8"
+              memory: 160Gi
+              ephemeral-storage: 30Gi
+            limits:
+              nvidia.com/a100: 1
+              cpu: "8"
+              memory: 160Gi
+              ephemeral-storage: 30Gi
+          volumeMounts:
+            - name: sft
+              mountPath: /data
+              readOnly: true
+            - name: rl
+              mountPath: /grpo
+            - name: dshm          # Ray's object store; must exceed RAY_OBJECT_STORE_GB
+              mountPath: /dev/shm
+      volumes:
+        - name: sft
+          persistentVolumeClaim:
+            claimName: ${SFT_PVC_NAME}
+            readOnly: true
+        - name: rl
+          persistentVolumeClaim:
+            claimName: ${RL_PVC_NAME}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 24Gi

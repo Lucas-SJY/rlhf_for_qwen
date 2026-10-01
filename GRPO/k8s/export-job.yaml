@@ -1,0 +1,49 @@
+# CPU-only Job that converts the latest GRPO actor checkpoint into a plain Hugging Face
+# model directory under /grpo/runs/<RUN_NAME>/export/ (src/export_policy.py).
+# Submitted by ../run.sh export, which substitutes the ${...} placeholders.
+# Set EXPORT_STEP in .env (then ./run.sh secrets) to export a step other than the latest.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}-export
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: nrp-registry
+      containers:
+        - name: export
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          command: ["python3", "/workspace/src/export_policy.py"]
+          envFrom:
+            - secretRef:
+                name: grpo-env
+          # The fp32 checkpoint (~33G), the bf16 base model and the merged copy are all in
+          # memory at once during the merge.
+          resources:
+            requests:
+              cpu: "4"
+              memory: 96Gi
+              ephemeral-storage: 10Gi
+            limits:
+              cpu: "4"
+              memory: 96Gi
+              ephemeral-storage: 10Gi
+          volumeMounts:
+            - name: sft
+              mountPath: /data
+              readOnly: true
+            - name: rl
+              mountPath: /grpo
+      volumes:
+        - name: sft
+          persistentVolumeClaim:
+            claimName: ${SFT_PVC_NAME}
+            readOnly: true
+        - name: rl
+          persistentVolumeClaim:
+            claimName: ${RL_PVC_NAME}

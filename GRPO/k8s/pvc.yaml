@@ -1,0 +1,19 @@
+# Everything the GRPO job writes: checkpoints, rollout logs and exported models. Kept
+# apart from the SFT PVC, which the job only reads, so a run can neither fill it nor
+# overwrite a finished SFT model.
+#
+# Size: one actor checkpoint is ~33G (FSDP keeps the LoRA-wrapped 8B in fp32), an
+# exported model 16G, and verl writes a new checkpoint before rotating the old one out.
+#
+# ${RL_PVC_NAME} is substituted by run.sh.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${RL_PVC_NAME}
+spec:
+  storageClassName: rook-ceph-block
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 150Gi

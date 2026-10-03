@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Training entrypoint: one node, GRPO via rLLM's unified trainer on verl.
 #
-# Used by both NRP Jobs (k8s/job.yaml and example/k8s/job.yaml) inside the image. It does
+# Used by the NRP Job (k8s/job.yaml) inside the image. It does
 # not depend on where it lives: paths are resolved relative to this file, so it also runs
 # from a checkout with a suitable Python environment.
 #
@@ -170,10 +170,15 @@ ROLLOUT=(
 # LoRA only: vLLM loads the frozen base weights from disk once and afterwards receives
 # just the adapter (verl's tested LoRA setup). Full-parameter training keeps verl's
 # defaults, which sync all weights into vLLM after every update.
+# The frozen base weights are also kept in bf16 instead of verl's fp32 default. The SFT
+# checkpoint is stored in bf16 and FSDP computes in bf16 either way, so the forward pass
+# is unchanged, but the 8B actor takes ~16 GB on the GPU instead of ~33 GB, which is what
+# lets it fit on a 48 GB card. PEFT keeps the adapter itself in fp32.
 if [ "${LORA_RANK}" -gt 0 ]; then
   ACTOR+=(
     actor_rollout_ref.model.lora_alpha="${LORA_ALPHA:-32}"
     actor_rollout_ref.model.target_modules=all-linear
+    actor_rollout_ref.actor.fsdp_config.model_dtype="${ACTOR_MODEL_DTYPE:-bf16}"
   )
   ROLLOUT+=(
     actor_rollout_ref.rollout.load_format=safetensors
@@ -182,7 +187,7 @@ if [ "${LORA_RANK}" -gt 0 ]; then
 fi
 
 TRAINER=(
-  # Both Jobs request one GPU. With N_GPUS > 1, FSDP shards the actor and vLLM runs one
+  # The Job requests one GPU. With N_GPUS > 1, FSDP shards the actor and vLLM runs one
   # replica per GPU.
   trainer.n_gpus_per_node="${N_GPUS:-1}"
   trainer.nnodes=1
@@ -205,5 +210,7 @@ TRAINER=(
 echo "[entrypoint] run dir ${RUN_DIR}"
 echo "[entrypoint] policy ${POLICY_MODEL_PATH:-/data/runs/qwen3-8b-sft-v3}  gpus ${N_GPUS:-1}"
 
-exec "${PYTHON_BIN:-python3}" "${SRC_DIR}/train_grpo.py" \
+# python3 on PATH, not PYTHON_BIN: PYTHON_BIN is a local path for ../run.sh and also
+# reaches the pod through the grpo-env Secret.
+exec python3 "${SRC_DIR}/train_grpo.py" \
   "${DATA[@]}" "${ALGORITHM[@]}" "${ACTOR[@]}" "${ROLLOUT[@]}" "${TRAINER[@]}" "$@"

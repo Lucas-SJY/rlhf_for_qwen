@@ -28,9 +28,8 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 def reward_weights_from_env() -> dict[str, float]:
     return {
-        "tag": float(os.environ.get("REWARD_W_TAG", "0.3")),
-        "align": float(os.environ.get("REWARD_W_ALIGN", "0.3")),
-        "correct": float(os.environ.get("REWARD_W_CORRECT", "0.4")),
+        "align": float(os.environ.get("REWARD_W_ALIGN", "0.5")),
+        "correct": float(os.environ.get("REWARD_W_CORRECT", "0.5")),
     }
 
 
@@ -57,6 +56,11 @@ def main(config) -> None:
         # The object store lives in /dev/shm; k8s/job.yaml mounts a memory-backed
         # emptyDir there. Keep this below that sizeLimit.
         settings.setdefault("object_store_memory", int(float(os.environ.get("RAY_OBJECT_STORE_GB", "16")) * 1024**3))
+        # Ray sizes its CPU pool from the pod's CPU limit, and verl alone reserves 3 CPUs per
+        # GPU plus 1 for the task runner. RAY_NUM_CPUS lets a pod with fewer real CPUs
+        # still advertise enough; Ray's CPUs only gate scheduling, so oversubscribing is fine.
+        if os.environ.get("RAY_NUM_CPUS"):
+            settings.setdefault("num_cpus", int(os.environ["RAY_NUM_CPUS"]))
         ray.init(runtime_env=get_ppo_ray_runtime_env(), **settings)
 
     weights = reward_weights_from_env()
@@ -64,7 +68,7 @@ def main(config) -> None:
 
     trainer = AgentTrainer(
         workflow_class=LabeledCoTWorkflow,
-        workflow_args={"reward_weights": weights},
+        workflow_args={"reward_weights": weights, "max_label_retries": int(os.environ.get("MAX_LABEL_RETRIES", "3"))},
         config=config,
         train_dataset=train,
         val_dataset=val,

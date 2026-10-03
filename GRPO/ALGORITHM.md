@@ -89,7 +89,8 @@ A_{i,t} = A_i                     for every token t of answer i
   shares that answer's advantage.
 
 Checked locally with the real rLLM code: one group with rewards `[1.0, 0.0, 0.6, 1.0]`
-(perfect, cut off, wrong answer, perfect) gets advantages `[0.855, −1.588, −0.122, 0.855]`.
+(perfect, cut off, wrong answer, perfect; scored with the earlier weights 0.3 / 0.3 / 0.4)
+gets advantages `[0.855, −1.588, −0.122, 0.855]`.
 
 ### 3.2 Policy loss (clipped, dual clip, asymmetric)
 
@@ -123,7 +124,7 @@ L = token-mean(L_{i,t}) + β · token-mean(kl_{i,t})
 
 Implemented in `src/labelcot/reward.py`. It uses rules only. Every question carries its
 own **annotated label sequence** (the labels of the reference trace's spans, from
-`bespoke-v2`) and its reference answer.
+`bespoke-v2` or `grpo_try`) and its reference answer.
 
 ### 4.1 Parsing a response
 
@@ -138,27 +139,31 @@ response = "<think>\n" thought "</think>" answer
 - **Steps.** The thought split on blank lines; empty paragraphs are dropped. The SFT
   targets are written this way: one `[label] text` paragraph per annotated span.
 - **A step's label.** The tag at the very start of the paragraph if it is one of the
-  eight below. Otherwise the step is untagged; a bracketed tag outside the vocabulary
-  also counts as *invented*.
+  eight below. Otherwise the step is untagged.
+- **An invalid tag.** A paragraph that opens with something tag-shaped that is not one of
+  the eight: a bracketed single word of 3+ letters, digits, `_` or `-` (`[thinking]`,
+  `[Planning_Next_Step]`, `[self-check]`), or a spaced spelling of a label
+  (`[planning next step]`). Other bracketed text (`[1, 2]`, `[x for x in xs]`,
+  `[Step 1]`) is content. Only the thought is checked.
 
 ```
 planning_next_step  restating_problem  recalling_knowledge  logical_deduction
 reflecting          verifying          correcting_itself    concluding
 ```
 
-### 4.2 The three terms
+### 4.2 The terms
 
 Let `g` be the list of generated step labels (untagged steps excluded), `n` the number of
 steps, and `ref` the annotated label list.
 
 ```
-tag_rate        = |g| / n                                          (0 if n = 0)
+tag_rate        = |g| / n                (logged, not rewarded)    (0 if n = 0)
 
 hist_sim        = 1 − ½ · Σ_label | count_g(label)/|g| − count_ref(label)/|ref| |
 seq_sim         = difflib.SequenceMatcher(collapse(g), collapse(ref)).ratio()
 label_alignment = ½ · (hist_sim + seq_sim)                         (0 if g or ref is empty)
 
-answer_correct  = closed ∧ checkable(gold) ∧ match(last \boxed{…} in the answer, gold)
+answer_correct  = closed ∧ checkable(gold) ∧ match(final answer after </think>, gold)
 ```
 
 - `hist_sim` is one minus the total-variation distance between the two label
@@ -166,66 +171,84 @@ answer_correct  = closed ∧ checkable(gold) ∧ match(last \boxed{…} in the a
   annotation?
 - `seq_sim` compares the **order** of tags. `collapse` merges consecutive repeats
   (`[a, a, b, a] → [a, b, a]`); Ratcliff/Obershelp ratio = 2 · matched / (|x| + |y|).
-- `match` is the scorer from `../../train/evaluate/eval_math500.py`:
-  - LaTeX normalisation;
-  - then exact string equality, or numeric equality within 1e-6;
-  - multiple-choice golds (a single letter A–E) compare only the chosen letter, so
-    `\textbf{(A)}` matches `A`.
+- `match` judges only the final answer, never the reasoning:
+  - Hugging Face `math_verify` (0.9.0) reads the last `\boxed{}` after `</think>`, or the
+    final stated answer when there is none, and decides mathematical equivalence:
+    `0.5 = 1/2 = \frac{1}{2}`, `3,840 = 3840`, `135^\circ = 135`, units dropped,
+    `(x+1)^2 = x^2+2x+1`, intervals and tuples.
+  - The string matcher of `../../train/evaluate/eval_math500.py` (LaTeX normalisation,
+    then exact string or numeric equality within 1e-6, on the last `\boxed{}`) also
+    counts as a match, so nothing it accepted is lost.
+  - Multiple-choice golds (a single letter A–E) compare only the chosen letter, so
+    `\textbf{(A)}` and `\textbf{(B) } 12` work; math_verify rejects the latter.
+  - math_verify times out with `signal.alarm`, which only works in the main thread. In a
+    worker thread the timeout is off and the input is capped (last 4,000 characters,
+    parsed expressions up to 400 characters).
 - Only the answer after `</think>` is searched; a `\boxed{}` inside the thought is working,
   not an answer.
 
 ### 4.3 Combining them
 
-Weights (env vars `REWARD_W_TAG`, `REWARD_W_ALIGN`, `REWARD_W_CORRECT`):
-`w_tag = 0.3`, `w_align = 0.3`, `w_correct = 0.4`.
+Weights (env vars `REWARD_W_ALIGN`, `REWARD_W_CORRECT`): `w_align = 0.5`,
+`w_correct = 0.5`. `tag_rate` is not part of the reward; it is computed and logged so
+the tag format stays visible.
+
+Before scoring, the workflow applies the format rule: a response with an invalid tag is
+discarded and sampled again with the same prompt and sampling parameters, up to
+`MAX_LABEL_RETRIES` (3) extra times. Only the kept response becomes the trajectory; the
+discarded ones are neither scored nor trained on. The same holds in validation.
 
 ```
-if truncated or not closed:
+if truncated or not closed or has an invalid tag:    # the last case only after the retries
     R = 0
 elif checkable(gold):
-    R = w_tag · tag_rate + w_align · label_alignment + w_correct · answer_correct
+    R = w_align · label_alignment + w_correct · answer_correct
 else:
-    R = (w_tag · tag_rate + w_align · label_alignment) / (w_tag + w_align)
+    R = label_alignment
 ```
 
 `R` is always in [0, 1].
 
-`checkable(gold)` is false when string matching cannot judge the reference answer. That
-is the case when any of the following holds:
-- it is empty;
+`checkable(gold)` is false when the reference answer cannot be judged automatically, by
+math_verify or by string matching. That is the case when any of the following holds:
+- it is empty (e.g. coding questions, whose reference solution is a program);
 - it is longer than 40 characters;
 - it contains `\text` or `\mbox`;
 - it contains a run of four or more letters outside LaTeX commands, i.e. prose.
 
-117 of 5,042 training answers (2.3 %) are not checkable.
+117 of 5,042 bespoke-v2 training answers (2.3 %) are not checkable, and 2 of the 9
+grpo_try questions (the two coding questions).
 
 ### 4.4 Worked examples
 
-For a response with 20 steps, 19 of them tagged, hist_sim 0.80 and seq_sim 0.50
-(label_alignment 0.65):
+For a response with hist_sim 0.80 and seq_sim 0.50 (label_alignment 0.65); how many of
+its steps are tagged does not enter R:
 
 | case | R |
 |---|---|
-| correct answer | 0.3·0.95 + 0.3·0.65 + 0.4·1 = **0.88** |
-| wrong answer | 0.3·0.95 + 0.3·0.65 + 0 = **0.48** |
-| prose answer (not checkable) | (0.285 + 0.195) / 0.6 = **0.80** |
+| correct answer | 0.5·0.65 + 0.5·1 = **0.825** |
+| wrong answer | 0.5·0.65 + 0 = **0.325** |
+| prose answer (not checkable) | label_alignment = **0.65** |
 | no `</think>`, or hit 8,192 tokens | **0** |
-| an SFT target scored against its own annotation | **1.0** (all 5,042 training targets) |
+| an SFT target scored against its own annotation | **1.0** (all 5,042 bespoke-v2 training targets and all 9 grpo_try references, re-checked with math_verify) |
 
 ### 4.5 What gets logged
 
 Per answer, averaged per step as `batch/<name>` (training) and
-`val/bespoke_labeled_cot/<name>` (validation):
+`val/<data_source>/<name>` (validation; `<data_source>` is `bespoke_labeled_cot`, or
+`grpo_try` for that task set):
 
 - `reward`, `closed_think`, `truncated`;
 - `n_steps`, `tag_rate`, `invented_tag_rate`;
+- `label_retries` (regenerations this answer needed) and `invalid_label` (1 if it still had
+  an invalid tag after the last retry);
 - `label_dist_sim` (= hist_sim), `label_seq_sim`, `label_alignment`;
 - `answer_checkable`, and `answer_correct` (checkable questions only);
 - `share_<label>` for each of the 8 labels: the generated label mix.
 
 rLLM additionally logs `reward/policy/{mean,std,min,max}` and
 `advantage/policy/{mean,std}`. An episode counts as correct (`is_correct`, which feeds
-`val/bespoke_labeled_cot/pass@1`) only when `answer_correct` is true.
+`val/<data_source>/pass@1`) only when `answer_correct` is true.
 
 ## 5. Hyperparameters
 
@@ -234,10 +257,11 @@ rLLM additionally logs `reward/policy/{mean,std,min,max}` and
 | data | questions per step | 8 | `rllm.data.train_batch_size` (`TRAIN_BATCH_SIZE`) |
 | | answers per question (group size) | 8 | `rllm.rollout.n` (`GROUP_SIZE`) |
 | | max prompt / response tokens | 2,048 / 8,192 | `rllm.data.max_prompt_length` / `max_response_length` |
-| | train / validation questions | 5,042 / 102 (SFT held-out ids) | `GRPO/data/*.jsonl` |
+| | train / validation questions | 5,042 / 102 (SFT held-out ids); grpo_try: 6 / 3 | `GRPO/data/*.jsonl` (`TRAIN_FILE` / `VAL_FILE`) |
 | rollout | train sampling | T = 1.0, top-p 1.0, top-k off | `rllm.rollout.train.*` |
 | | validation sampling | 1 answer, T = 0.6, top-p 0.95, top-k 20 | `rllm.rollout.val.*`, `rllm.rollout.n_val` |
 | | vLLM GPU share while generating | 0.7 | `actor_rollout_ref.rollout.gpu_memory_utilization` |
+| reward | weights align / correct | 0.5 / 0.5 (`tag_rate` logged, not rewarded) | `REWARD_W_ALIGN` / `REWARD_W_CORRECT` |
 | advantage | estimator | GRPO, std-normalised | `rllm.algorithm.adv_estimator`, `norm_adv_by_std_in_grpo` (`NORM_ADV_BY_STD`) |
 | loss | clip ε_low / ε_high, dual clip c | 0.2 / 0.28, 3.0 | `rllm.algorithm.eps_clip` / `eps_clip_high` (`CLIP_LOW` / `CLIP_HIGH`) |
 | | aggregation, entropy bonus | token-mean, 0 | `rllm.algorithm.loss_agg_mode`, `actor.entropy_coeff` |
@@ -255,7 +279,7 @@ rLLM additionally logs `reward/policy/{mean,std,min,max}` and
 **Measured on the data.** Scoring each question's annotation against a *random other*
 question's annotation already gives `label_alignment` 0.58 on average: hist_sim 0.73,
 seq_sim 0.43. The label terms therefore span only a small range compared with right vs.
-wrong (0.4).
+wrong (0.5).
 
 The following follow from the definitions and still have to be observed in a run (step-0
 validation, or `rllm.trainer.val_only=true`, gives the SFT baseline for every term):
@@ -268,8 +292,9 @@ validation, or `rllm.trainer.val_only=true`, gives the SFT baseline for every te
   - `NORM_ADV_BY_STD=false` turns the scaling off.
 - **Uniform groups are wasted compute.** All-truncated or otherwise identical groups have
   zero advantage. `batch/truncated` shows how often it happens.
-- **`tag_rate` is probably close to saturated.** According to the model card, the SFT
-  model already used the tags in all 500 MATH-500 outputs.
+- **`tag_rate` is not rewarded.** According to the model card, the SFT model already
+  used the tags in all 500 MATH-500 outputs; `batch/tag_rate` and
+  `batch/invented_tag_rate` show whether that holds during training.
 - **The label terms can be satisfied cheaply.** Nothing checks that a tag fits its
   paragraph, and length costs nothing until the 8,192 limit. The policy could relabel
   steps or add filler steps.
@@ -277,6 +302,23 @@ validation, or `rllm.trainer.val_only=true`, gives the SFT baseline for every te
   different valid solution path loses points.
 - **Truncation scores 0.** This pushes the model to finish, but also biases it toward
   shorter reasoning.
+- **Untagged paragraphs are not penalised directly.** Only the tagged steps enter
+  `label_alignment`, so untagged paragraphs cost nothing as long as the tagged ones still
+  match the annotation's mix and order. An answer with no tags at all gets
+  `label_alignment` 0: right, it scores 0.5, as much as a perfectly tagged wrong answer.
+  A group whose 8 answers are all untagged and equally right gets no signal towards the
+  tags. Enforcing the tag format by rule at generation time (constrained decoding) would
+  close this without a reward term.
+- **Regeneration hides the format errors from training.** Rejected samples are never
+  trained on, so the policy gets no gradient against invalid tags; the rule keeps the
+  output valid, but the underlying rate does not fall by itself. `batch/label_retries`
+  shows that rate, and each retry is a full extra generation (up to 8,192 tokens), so a
+  high rate also slows every step. Only invalid tags trigger a retry; untagged paragraphs
+  are allowed.
+- **Training is more lenient than the offline evaluation.** `answer_correct` accepts
+  math_verify equivalences that `../../train/evaluate/eval_math500.py` (string and number
+  matching only) rejects, so training accuracy can read higher than offline accuracy on
+  the same answers.
 - **Sparse, sequence-level credit.** Every token of an answer gets the same advantage;
   there is no per-step signal for individual tags.
 

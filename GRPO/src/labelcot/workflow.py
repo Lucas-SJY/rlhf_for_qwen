@@ -9,6 +9,11 @@ i.e. exactly the way the SFT data was tokenised. rLLM's ``QwenChatTemplateParser
 prepend a default "You are Qwen, created by Alibaba Cloud..." system turn that the SFT
 model never saw. Generation still goes through rLLM's token-in/token-out path, so the
 trainer gets the exact sampled token ids and their logprobs.
+
+The tag format is a rule, not a reward term: a completion whose thought has a tag
+outside the eight labels is thrown away and sampled again, up to ``max_label_retries``
+times. Only the kept completion becomes the trajectory; one that still has an invalid
+tag after the last retry scores 0.
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ from rllm.types import Action, Step, Trajectory
 from rllm.workflows.workflow import TerminationEvent, TerminationReason, Workflow
 
 from labelcot.patches import apply_patches
-from labelcot.reward import RewardBreakdown, RewardWeights, score_completion
+from labelcot.reward import RewardBreakdown, RewardWeights, invalid_labels, score_completion
 
 # Runs in every process that imports this module, including rLLM's Ray TaskRunner actor
 # (it imports the module when it receives the workflow class). See patches.py.
@@ -25,9 +30,11 @@ apply_patches()
 
 
 class LabeledCoTWorkflow(Workflow):
-    def __init__(self, rollout_engine, executor, reward_weights: dict | None = None, **kwargs):
+    def __init__(self, rollout_engine, executor, reward_weights: dict | None = None,
+                 max_label_retries: int = 3, **kwargs):
         super().__init__(rollout_engine, executor, **kwargs)
         self.reward_weights = RewardWeights(**(reward_weights or {}))
+        self.max_label_retries = max(0, int(max_label_retries))
         self._breakdown: RewardBreakdown | None = None
 
     def reset(self, task: dict | None = None, uid: str | None = None) -> None:
@@ -50,14 +57,20 @@ class LabeledCoTWorkflow(Workflow):
         is_validation = bool(getattr(engine, "is_validation", False) or getattr(engine, "validate", False))
         sampling = dict(engine.val_sampling_params if is_validation else engine.train_sampling_params)
 
-        # Raises TerminationEvent(MAX_PROMPT_LENGTH_EXCEEDED) for an overlong prompt; the
-        # base class turns that into an empty episode that the trainer drops.
-        token_output = await engine.get_token_output_from_token_input(token_input=prompt_ids, application_id=uid, **sampling)
-        output = engine.assemble_model_output(token_input=prompt_ids, token_output=token_output, prompt_ids=prompt_ids)
+        # Sample until the thought has no tag outside the eight labels, at most
+        # max_label_retries extra times. Rejected samples are discarded, not trained on.
+        for retries in range(self.max_label_retries + 1):
+            # Raises TerminationEvent(MAX_PROMPT_LENGTH_EXCEEDED) for an overlong prompt; the
+            # base class turns that into an empty episode that the trainer drops.
+            token_output = await engine.get_token_output_from_token_input(token_input=prompt_ids, application_id=uid, **sampling)
+            output = engine.assemble_model_output(token_input=prompt_ids, token_output=token_output, prompt_ids=prompt_ids)
+            if not invalid_labels(output.text or ""):
+                break
         output.weight_version = engine.weight_version
 
         truncated = output.finish_reason == "length"
         breakdown = score_completion(output.text or "", task, truncated=truncated, weights=self.reward_weights)
+        breakdown.label_retries = retries
         self._breakdown = breakdown
 
         step = Step(

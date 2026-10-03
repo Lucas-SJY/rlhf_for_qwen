@@ -8,4 +8,3 @@ tests/
 k8s/
 *.md
 .DS_Store
-example/

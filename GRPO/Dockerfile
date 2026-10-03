@@ -46,6 +46,11 @@ RUN pip install --no-deps "rllm @ git+https://github.com/rllm-org/rllm.git@${RLL
     && pip install -c /tmp/pins.txt click rich pydantic PyYAML openai tqdm requests httpx \
          sympy "antlr4-python3-runtime==4.9.3" aiosqlite fastapi uvicorn
 
+# Hugging Face math_verify for the answer check (0.5 = 1/2 = \frac{1}{2}). No dependency
+# resolution: its default antlr4 extra would replace the 4.9.3 that hydra/omegaconf need,
+# and latex2sympy2_extended accepts 4.9.3 as well. sympy is already installed.
+RUN pip install --no-deps "math-verify==0.9.0" "latex2sympy2_extended==1.11.0"
+
 COPY src/ src/
 # The task set is a few MB, so it is baked into the image like the SFT data was.
 COPY data/ data/
@@ -57,6 +62,9 @@ assert (r.files('verl.trainer.config') / 'ppo_trainer.yaml').is_file(), 'verl co
 import verl, peft; \
 from rllm.trainer import AgentTrainer; \
 from labelcot.workflow import LabeledCoTWorkflow; \
+from labelcot.reward import MATH_VERIFY_AVAILABLE, answer_is_correct; \
+assert MATH_VERIFY_AVAILABLE, 'math_verify missing'; \
+assert answer_is_correct(r'so \\boxed{\\frac{1}{2}}', '0.5'), 'math_verify check failed'; \
 print('import check ok, verl', verl.__version__)"; \
     fi
 

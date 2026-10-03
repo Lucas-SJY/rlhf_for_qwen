@@ -1,6 +1,6 @@
 .DS_Store
 
-# Secrets live in .env files at any depth (./.env, GRPO/example/.env, ...); patterns
+# Secrets live in .env files at any depth (./.env, GRPO/.env, ...); patterns
 # without a slash match in every directory. Only the placeholder templates are tracked.
 .env
 .env.*
@@ -11,3 +11,4 @@ GRPO/data/
 
 __pycache__/
 *.py[cod]
+grpo_try/

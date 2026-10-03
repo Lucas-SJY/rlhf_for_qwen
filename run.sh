@@ -34,6 +34,9 @@ fi
 JOB_NAME="${JOB_NAME:-qwen-grpo}"
 SFT_PVC_NAME="${SFT_PVC_NAME:-qwen-sft-data}"
 RL_PVC_NAME="${RL_PVC_NAME:-qwen-grpo-data}"
+# Training pod size; the defaults fit the 8B run.
+POD_CPU="${POD_CPU:-8}"
+POD_MEMORY="${POD_MEMORY:-160Gi}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 BESPOKE_DIR="${BESPOKE_DIR:-../train/bespoke-v2}"
 SFT_SPLIT_DIR="${SFT_SPLIT_DIR:-../train/data_labeled_2}"
@@ -60,6 +63,8 @@ render() {
       -e "s|\${JOB_NAME}|${JOB_NAME}|g" \
       -e "s|\${SFT_PVC_NAME}|${SFT_PVC_NAME}|g" \
       -e "s|\${RL_PVC_NAME}|${RL_PVC_NAME}|g" \
+      -e "s|\${POD_CPU}|${POD_CPU}|g" \
+      -e "s|\${POD_MEMORY}|${POD_MEMORY}|g" \
       "$1"
 }
 
@@ -142,7 +147,7 @@ follow_job() {
       case "${phase}" in
         Running | Succeeded | Failed) break ;;
       esac
-      # Pending is where NRP jobs get stuck (no free A100-80GB, quota, PVC attach).
+      # Pending is where NRP jobs get stuck (no free GPU, quota, PVC attach).
       reason="$("${KUBECTL[@]}" get pod "${pod}" \
         -o jsonpath='{.status.conditions[?(@.type=="PodScheduled")].message}' 2>/dev/null || true)"
       [ -z "${reason}" ] && reason="${phase}"

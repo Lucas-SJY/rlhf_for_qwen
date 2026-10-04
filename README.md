@@ -1,10 +1,5 @@
 # Labelled-CoT Qwen GRPO training
 
-This is the Dayallen harness, adapted from the team's `master` commit `58624bb`.
-It retains the team's **rLLM unified trainer → verl → vLLM** workflow and reward:
-50% reference-label alignment and 50% automatically checkable final-answer correctness.
-GRPO trains a fresh LoRA adapter on the full Qwen SFT checkpoint.
-
 The architecture, algorithm and reward details are in [GRPO/ALGORITHM.md](GRPO/ALGORITHM.md).
 Historical design decisions and the teammate's small-model GPU results are in
 [GRPO/README.md](GRPO/README.md). Those GPU results do not validate this modified branch.

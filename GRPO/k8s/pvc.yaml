@@ -1,0 +1,20 @@
+# Everything the GRPO job writes: checkpoints, rollout logs and exported models. Kept
+# apart from the SFT PVC, which the job only reads, so a run can neither fill it nor
+# overwrite a finished SFT model.
+#
+# Capacity budget includes two retained checkpoints, a checkpoint being written,
+# export staging/merged model and rollout logs. Measure actual usage with the 8B run;
+# dtype and optimizer state determine checkpoint size.
+#
+# ${RL_PVC_NAME} is substituted by run.sh.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ${RL_PVC_NAME}
+spec:
+  storageClassName: rook-ceph-block
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 150Gi

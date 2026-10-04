@@ -1,0 +1,89 @@
+# GRPO training Job: one pod, one L40 or L40S (48 GB). Same pattern as ../../train/k8s/job.yaml.
+#
+# Do not apply this file by hand -- ../run.sh substitutes ${IMAGE}, ${JOB_NAME},
+# ${SFT_PVC_NAME}, ${RL_PVC_NAME}, ${POD_CPU} and ${POD_MEMORY}, and creates the Secrets
+# it depends on:
+#   ./run.sh submit     just (re)submit
+#   ./run.sh            data + image + secrets + pvc + submit + logs
+#
+# Hyperparameters and keys arrive through ENV_SECRET_NAME (envFrom); this file only
+# describes hardware and volumes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${JOB_NAME}
+spec:
+  backoffLimit: 2              # an evicted pod resumes from the last checkpoint
+  ttlSecondsAfterFinished: 604800
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ${REGISTRY_SECRET_NAME}
+      # L40 / L40S instead of A100-80GB: the namespace's A100 quota (ResourceQuota
+      # a100-limit) is 0, while nvidia.com/gpu has no quota, so the pod runs at normal
+      # priority and is never preempted. Both are Ada (flash-attn 2, bf16) with 48 GB, and
+      # their nodes run drivers >= 595 (CUDA 13.2). vLLM (8B weights + KV cache) and the
+      # LoRA actor (bf16 base weights, see entrypoint.sh) take turns on the card.
+      # nvidia.com/gpu covers every generic GPU type on NRP; the affinity keeps the pod on
+      # these two. Other cards, by replacing the resource key in requests and limits:
+      #   - RTX A6000 (48 GB): nvidia.com/rtxa6000, and drop the affinity (the key alone
+      #     selects A6000 nodes);
+      #   - A100-80GB once there is quota: nvidia.com/a100, with the affinity listing
+      #     NVIDIA-A100-SXM4-80GB and NVIDIA-A100-80GB-PCIe.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nvidia.com/gpu.product
+                    operator: In
+                    values:
+                      - NVIDIA-L40
+                      - NVIDIA-L40S
+      containers:
+        - name: trainer
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          command: ["bash", "/workspace/src/entrypoint.sh"]
+          envFrom:
+            - secretRef:
+                name: ${ENV_SECRET_NAME}
+          # CPU and RAM come from POD_CPU / POD_MEMORY in .env (default 8 / 160Gi, sized
+          # for the 8B run). Host memory holds whatever is not on the GPU at the moment: the
+          # offloaded actor (bf16 base ~16G plus the fp32 adapter and its Adam state),
+          # vLLM's sleeping weights (~16G), the Ray object store (/dev/shm,
+          # RAY_OBJECT_STORE_GB) and the Ray worker processes. There is no critic.
+          # NRP policy: cpu limit/request ratio <= 1.2 and GPU requests == limits; keep all
+          # equal.
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              cpu: "${POD_CPU}"
+              memory: ${POD_MEMORY}
+              ephemeral-storage: 30Gi
+            limits:
+              nvidia.com/gpu: 1
+              cpu: "${POD_CPU}"
+              memory: ${POD_MEMORY}
+              ephemeral-storage: 30Gi
+          volumeMounts:
+            - name: sft
+              mountPath: /data
+              readOnly: true
+            - name: rl
+              mountPath: /grpo
+            - name: dshm          # Ray's object store; must exceed RAY_OBJECT_STORE_GB
+              mountPath: /dev/shm
+      volumes:
+        - name: sft
+          persistentVolumeClaim:
+            claimName: ${SFT_PVC_NAME}
+            readOnly: true
+        - name: rl
+          persistentVolumeClaim:
+            claimName: ${RL_PVC_NAME}
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 24Gi

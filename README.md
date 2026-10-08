@@ -2,8 +2,8 @@
 
 The RL stage that follows the SFT project in `../train`. It trains the full-parameter SFT
 checkpoint `qwen3-8b-sft-v3` with **GRPO** so that the model reasons in steps labelled
-with the eight annotation tags, following the annotation of each question, without losing
-answer accuracy. It uses the latest rLLM (unified trainer) on verl, and runs as one
+with the eight annotation tags, in the label mix of a typical annotated trace, without
+losing answer accuracy. It uses the latest rLLM (unified trainer) on verl, and runs as one
 Kubernetes Job on NRP, the same way the SFT job does.
 
 - **[GRPO/README.md](GRPO/README.md)**: design decisions and what has been verified
@@ -43,7 +43,8 @@ checkpoints at steps 2 and 3. It writes to `<RUN_NAME>-smoke`.
 - `SMOKE_TEST=true` overrides the size settings in `.env`, so there is no need to shrink
   them by hand.
 - Almost every answer is cut off at 1,024 tokens, so its rewards are ~0; it only proves
-  that the pipeline runs.
+  that the pipeline runs. The smoke test keeps cut-off answers in training
+  (`MASK_TRUNCATED=false`), so the update step still runs.
 
 | command | what it does |
 |---|---|
@@ -68,21 +69,60 @@ All settings live in `.env` (template: `.env.example`).
 | variable | default | notes |
 |---|---|---|
 | `POLICY_MODEL_PATH` | `/data/runs/qwen3-8b-sft-v3` | the SFT checkpoint on the SFT PVC, mounted read-only at `/data` |
+| `POLICY_MODEL_REVISION` | unset | set it to train from the Hub: `POLICY_MODEL_PATH` is then a repo id (e.g. `Lucas-SJY/qwen3-8b-sft-bespoke`) and this a branch, tag or commit (e.g. `v3`). The snapshot is downloaded once into `HF_HOME` (`/grpo/hf`, on the RL PVC) and reused by later runs; a private repo needs `HF_TOKEN` |
 | `TRAIN_BATCH_SIZE`, `GROUP_SIZE` | 8, 8 | questions per step, answers per question |
-| `MAX_PROMPT_LENGTH`, `MAX_RESPONSE_LENGTH` | 2048, 8192 | longer answers score 0 |
-| `LORA_RANK`, `LORA_ALPHA`, `ACTOR_LR` | 64, 32, 1e-5 | the LoRA adapter GRPO adds on top of the full SFT weights, whose frozen copy is kept in bf16 (`ACTOR_MODEL_DTYPE=fp32` restores verl's default, which does not fit a 48 GB card). `LORA_RANK=0` trains all parameters instead (with a separate frozen reference model); use a full-fine-tune learning rate such as `ACTOR_LR=1e-6` then |
+| `MAX_PROMPT_LENGTH`, `MAX_RESPONSE_LENGTH` | 2048, 8192 | an answer cut off at the limit is dropped from training (see `MASK_TRUNCATED`) |
+| `MASK_TRUNCATED` | true | an answer cut off at `MAX_RESPONSE_LENGTH` is left out of the training batch (no reward, no gradient, not part of its group's mean/std; rLLM's compact filtering, DAPO's overlong filtering) instead of scoring 0; validation still counts it as wrong. `false`: train on it with reward 0. Smoke tests use `false` |
+| `LORA_RANK`, `LORA_ALPHA`, `ACTOR_LR` | 64, 32, 1e-5 | the LoRA adapter GRPO adds on top of the full SFT weights, whose frozen copy is kept in bf16 (`ACTOR_MODEL_DTYPE=fp32` restores verl's default, which does not fit a 48 GB card). `LORA_RANK=0` trains all parameters instead (with a separate frozen reference model); use a full-fine-tune learning rate such as `ACTOR_LR=1e-6` then. For the 8B model that needs `N_GPUS=4` A100s, see [Full-parameter training](#full-parameter-training) |
 | `PPO_MINI_BATCH_SIZE` | 4 | questions per optimizer update, i.e. 2 updates per step |
 | `CLIP_LOW`, `CLIP_HIGH`, `KL_BETA`, `NORM_ADV_BY_STD` | 0.2, 0.28, 0.001, true | see ALGORITHM.md §3 |
-| `REWARD_W_ALIGN`, `REWARD_W_CORRECT` | 0.5, 0.5 | label alignment and answer correctness weigh 0.5 each; `tag_rate` is logged, not rewarded; see ALGORITHM.md §4 |
-| `MAX_LABEL_RETRIES` | 3 | an answer whose thought has a tag outside the eight labels is sampled again, up to this many times; still invalid after that, it scores 0 |
+| `REWARD_W_LABEL`, `REWARD_W_CORRECT` | 0.2, 0.8 | weights of valid labels (the thought has tags and all of them are among the eight) and of answer correctness; no reference trace; `tag_rate` and `label_mix` are logged, not rewarded; see ALGORITHM.md §4 |
+| `MAX_LABEL_RETRIES` | 3 | an answer whose thought has a tag outside the eight labels is sampled again, up to this many times; still invalid after that, it gets no label reward (only the correctness weight) |
 | `TOTAL_TRAINING_STEPS`, `EPOCHS` | 200, 1 | step cap; -1 = full epochs (630 steps) |
 | `SAVE_FREQ`, `TEST_FREQ`, `VAL_BEFORE_TRAIN` | 20, 20, true | a final checkpoint and a final validation always happen |
 | `ROLLOUT_GPU_MEM_UTIL` | 0.7 | vLLM's share of the GPU while generating |
 | `RUN_NAME`, `OUTPUT_ROOT` | `qwen3-8b-grpo-labels-v1`, `/grpo/runs` | |
 | `SMOKE_TEST` | false | true: 3 tiny steps; overrides the size settings above |
 | `REPORT_TO`, `WANDB_API_KEY`, `WANDB_PROJECT` | `wandb`, empty, `context-comp-grpo` | as in `../train`: `REPORT_TO=wandb` streams all metrics to wandb.ai and needs `WANDB_API_KEY` (or `WANDB_MODE=offline`); empty `REPORT_TO` = console only |
-| `POD_CPU`, `POD_MEMORY`, `RAY_OBJECT_STORE_GB`, `RAY_NUM_CPUS` | 8, `160Gi`, 16, unset | training pod size, sized for 8B. A small model fits 4 / `64Gi` / 8 and schedules far more easily; with `POD_CPU` below 8 set `RAY_NUM_CPUS=8`, or Ray runs out of CPUs to hand to verl and vLLM |
+| `GPU_TYPE`, `GPU_PRIORITY_CLASS` | `l40`, empty | the card: `l40` (L40 / L40S, 48 GB), `a6000` (RTX A6000, 48 GB) or `a100` (A100-80GB). `a100` runs at priority `opportunistic` unless `GPU_PRIORITY_CLASS` is set: no quota needed, but the pod can be preempted (it then resumes from the last checkpoint). The namespace has an A100 quota of 4 since 2026-10-05, so `GPU_PRIORITY_CLASS=` (empty, normal priority) runs without preemption |
+| `N_GPUS` | 1 | cards on the one node the pod runs on; the Job requests this many and FSDP shards the actor across them, with one vLLM replica per card |
+| `FSDP_CPU_OFFLOAD`, `OMP_NUM_THREADS` | false, unset | true: FSDP2 with CPU offload. The actor's weights, gradients and Adam state stay in host RAM, layers go to the GPU only while computed, and Adam steps on the CPU with `OMP_NUM_THREADS` threads per worker (Ray's default is 1). Much less GPU memory, slower steps; see [Full-parameter training](#full-parameter-training) |
+| `POD_CPU`, `POD_MEMORY`, `RAY_OBJECT_STORE_GB`, `RAY_NUM_CPUS` | 8, `160Gi`, 16, unset | training pod size, sized for the 8B LoRA run on one card (the 4-card full-parameter run uses 16 / `256Gi`). A small model fits 4 / `64Gi` / 8 and schedules far more easily; with `POD_CPU` below 8 set `RAY_NUM_CPUS=8`, or Ray runs out of CPUs to hand to verl and vLLM |
 | `TRAIN_FILE`, `VAL_FILE` | `/workspace/data/{train,validation}.jsonl` | task files inside the image; see [Training on grpo_try](#training-on-grpo_try) |
+
+## Full-parameter training
+
+`LORA_RANK=0` updates all 8B weights instead of a LoRA adapter. fp32 weights, gradients and
+Adam state come to ~128 GB, more than one card holds. Two ways to fit it:
+
+| | 4 A100s, FSDP1 | 2 A100s, FSDP2 CPU offload |
+|---|---|---|
+| settings | `N_GPUS=4` | `N_GPUS=2`, `FSDP_CPU_OFFLOAD=true`, `OMP_NUM_THREADS=6` |
+| where weights / grads / Adam live during the update | on the GPUs, sharded 4 ways (~49 GB per card at the optimizer step) | in pinned host RAM; only the layers being computed are on the GPU |
+| optimizer step | GPU | CPU |
+| speed | faster | slower (host-device copies every pass, CPU Adam) |
+| verified on a GPU | config only | config only |
+
+Both use:
+
+```bash
+LORA_RANK=0
+ACTOR_LR=1e-6
+GPU_TYPE=a100
+GPU_PRIORITY_CLASS=
+POD_CPU=16
+POD_MEMORY=256Gi
+```
+
+- The KL reference is a separate frozen copy of the SFT model, kept in host RAM (CPU
+  offload) in both modes, and vLLM receives all weights after every update.
+- The pod waits (Pending) until one node has `N_GPUS` free A100s and enough free CPU and
+  RAM. 4 A100s are the namespace's whole A100 quota.
+- Checkpoints keep the weights and the training position but not the Adam state: ~33 GB
+  instead of ~100 GB. verl keeps the previous checkpoint until the next one is written, and
+  two full checkpoints would not fit on the 150Gi RL PVC. A resumed run therefore restarts
+  Adam's moments. `CKPT_SAVE_OPTIMIZER=true` keeps them, after growing the PVC (e.g. to
+  300Gi).
 
 ## Training on grpo_try
 
@@ -95,25 +135,24 @@ python3 GRPO/src/prepare_grpo_try.py --strict      # stop on the first malformed
 python3 GRPO/src/prepare_grpo_try.py --check-only  # only check the existing output files
 ```
 
+- **Output.** One task per line with only `id`, `data_source`, `prompt` (chat format:
+  one user turn holding the question, as in SFT), `question` and `answer`. The reference
+  trace and its labels are not written: the reward does not use them.
 - **Format check.** Every input file must be valid JSON with a string `id` and
-  `question` and a list of `spans`, each with a string `label` and `text` (and integer
-  `start`, `end`, `token_count` when present). A file that fails is reported with the
-  file, line and column or field, and skipped (`--strict`: the run stops). An unknown
-  label, an empty span or an id that does not match the file name only warns; the span
-  is dropped, as in SFT. The written files are read back and checked line by line: field
-  types, no unexpected keys, `ref_cot` blocks matching `ref_labels`, `answer` equal to the
-  `\boxed{}` of `solution`, and no id twice. Any error there exits with status 1.
+  `question` (the labelled spans are not used). A file that fails is reported with the
+  file, line and column or field, and skipped (`--strict`: the run stops); an id that
+  does not match the file name only warns. The written files are read back and checked
+  line by line: field types, no unexpected keys, a well-formed `prompt` whose last user
+  turn holds the `question`, and no id twice. Any error there exits with status 1.
 
 - **Answers.** Recovered by sample id from the upstream harbor dataset
   (`../jianhong_harbor/harbor/datasets/bespoke-stratos-rest`), as `../train` did for
   bespoke-v2. 7 of the 9 have a `\boxed{}` answer; the two coding questions do not, so
-  their reward uses only the label terms.
-- **Labelled reference.** Each task also carries `ref_cot`, the reference reasoning with
-  every span's label in front of its text (`[label] text`, blank-line separated, the SFT
-  target format), and the upstream `solution`. The reward compares against `ref_labels`;
-  the reference itself (`<think>\n` + `ref_cot` + `\n</think>\n\n` + `solution`) scores 1.0.
-- **Split.** By trace, with the same 3 held-out traces as `../train/grpo_test.json` (the
-  step-level export of the same data): 6 train, 3 validation.
+  their reward uses only the label term.
+- **Split.** By trace: 6 train, 3 validation. The validation traces default to the three
+  held out by the earlier step-level export (`../train/grpo_test.json`, since removed):
+  `sample_008604`, `sample_013628`, `sample_014855` (`--val-ids` to change them). One of
+  them is a coding question without an answer, so validation `pass@1` tops out at 2/3.
 
 To train on it, add to `.env` and rebuild the image (the data is baked in):
 
@@ -135,9 +174,11 @@ smoke test). Every step logs about 140 metrics; these are the ones to watch:
 
 | metric | meaning |
 |---|---|
-| `batch/reward`, `reward/policy/mean` | mean reward of the step's 64 answers |
+| `batch/reward`, `reward/policy/mean` | mean reward of the step's answers, without the ones cut off at the length limit (those are not trained on) |
 | `val/bespoke_labeled_cot/reward`, `val/bespoke_labeled_cot/pass@1` | reward and accuracy on the 102 held-out questions (step 0, every `TEST_FREQ` steps, end) |
-| `batch/answer_correct`, `batch/label_alignment`, `batch/truncated` | the reward terms, and how often answers hit the length limit |
+| `batch/answer_correct`, `batch/label_valid`, `batch/truncated` | the reward terms, and how often answers hit the length limit |
+| `groups/num_trajs_before_filter`, `groups/num_trajs_after_filter` | answers generated in the step, and how many are left for training once the cut-off ones are dropped |
+| `batch/label_mix`, `batch/share_<label>` | how the label shares compare with the average annotated trace (logged only) |
 | `batch/tag_rate`, `batch/invented_tag_rate` | share of paragraphs with a valid tag, and with a made-up one (logged only, not rewarded) |
 | `batch/label_retries`, `batch/invalid_label` | regenerations per answer because of a tag outside the eight labels, and the share still invalid after the last retry |
 | `batch/policy/fractions/effective` | share of questions whose 8 answers got different rewards; only these produce a gradient |
@@ -158,18 +199,21 @@ pipeline runs, but the model does not change.
   - Lower `MAX_RESPONSE_LENGTH` first.
   - If the OOM happens while generating, lower `ROLLOUT_GPU_MEM_UTIL` or `GROUP_SIZE`.
   - Lower `LORA_RANK`.
-  - If none of that helps, move to A100-80GB (see the `exceeded quota` item below).
-- **Pending.** Either no free L40 / L40S (`./run.sh status` shows
-  `Insufficient nvidia.com/gpu`; the comment in `GRPO/k8s/job.yaml` lists the other
-  48 GB and 80 GB options), or a Multi-Attach error: both PVCs are ReadWriteOnce, so no
-  other pod may hold them on another node.
-- **Job `Running 0/1` with no pod, and events say `exceeded quota: a100-limit`.** This
-  only happens after switching the Job to A100-80GB (`nvidia.com/a100`, see the comment in
-  `GRPO/k8s/job.yaml`). The namespace's A100 quota is 0 (`kubectl get resourcequota`), so
-  the pod is rejected before it is scheduled. Either ask the NRP admins to raise it (A100
-  access request), or add `priorityClassName: opportunistic` to the pod spec, which
-  bypasses the GPU quota but can be preempted at any time. That quota is why the Job
-  requests L40 / L40S (`nvidia.com/gpu`, no quota).
+  - If none of that helps, move to A100-80GB: `GPU_TYPE=a100`.
+- **Pending.** Either no free card of `GPU_TYPE` (`./run.sh status` shows `Insufficient
+  nvidia.com/gpu`, `.../rtxa6000` or `.../a100`; try another `GPU_TYPE`), or a
+  Multi-Attach error: both PVCs are ReadWriteOnce, so no other pod may hold them on
+  another node.
+- **Job `Running 0/1` with no pod, and events say `exceeded quota: a100-limit`.** The
+  Job asks for more A100s than the namespace's quota has left (4 in total; `kubectl get
+  resourcequota a100-limit` shows how many are in use), at normal priority
+  (`GPU_PRIORITY_CLASS=` empty). Wait for the other A100 pods to finish, lower `N_GPUS`,
+  or leave `GPU_PRIORITY_CLASS` unset (priority `opportunistic`, which bypasses the quota
+  but can be preempted).
+- **The pod disappears and a new one starts (A100).** With `opportunistic` priority the
+  pod can be preempted by higher-priority work. The Job retries up to twice and the new
+  pod resumes from the newest checkpoint of its `RUN_NAME`; a lower `SAVE_FREQ` loses less
+  work.
 - **`ValueError: ... expandable segments`.** A `PYTORCH_*ALLOC_CONF` got through. The
   entrypoint strips `expandable_segments:True`; check `kubectl exec <pod> -- env`.
 - **Image build fails in the import check on a Mac.** The emulated amd64 build could not

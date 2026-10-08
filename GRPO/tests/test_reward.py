@@ -13,18 +13,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from labelcot.reward import (  # noqa: E402
+    LABEL_PRIOR,
     MATH_VERIFY_AVAILABLE,
     RewardWeights,
     answer_is_checkable,
     answer_is_correct,
     invalid_labels,
     is_correct,
+    label_mix_similarity,
     score_completion,
-    sequence_similarity,
 )
 
-REF = ["restating_problem", "planning_next_step", "logical_deduction", "logical_deduction", "concluding"]
-TASK = {"answer": "9", "ref_labels": REF}
+TASK = {"answer": "9"}
 
 
 def completion(steps, answer="The answer is $\\boxed{9}$.", close=True):
@@ -45,61 +45,70 @@ PERFECT_STEPS = [
 
 
 class RewardTest(unittest.TestCase):
-    def test_perfect_completion_scores_one(self):
+    def test_valid_labels_and_right_answer_score_one(self):
         b = score_completion(completion(PERFECT_STEPS), TASK, truncated=False)
-        self.assertTrue(b.closed and b.answer_correct)
-        self.assertAlmostEqual(b.tag_rate, 1.0)
-        self.assertAlmostEqual(b.label_alignment, 1.0)
+        self.assertTrue(b.closed and b.answer_correct and b.label_valid)
         self.assertAlmostEqual(b.reward, 1.0)
+        # The label mix is only logged.
+        self.assertTrue(0.0 < b.label_mix < 1.0)
 
-    def test_truncated_or_unclosed_scores_zero(self):
-        self.assertEqual(score_completion(completion(PERFECT_STEPS), TASK, truncated=True).reward, 0.0)
+    def test_valid_labels_and_wrong_answer_score_the_label_weight(self):
+        b = score_completion(completion(PERFECT_STEPS, answer="$\\boxed{8}$"), TASK, truncated=False)
+        self.assertTrue(b.label_valid and not b.answer_correct)
+        self.assertAlmostEqual(b.reward, 0.2)
+
+    def test_no_reference_trace_is_used(self):
+        # The reward reads only the answer; reference labels, if a task has them, change nothing.
+        with_ref = dict(TASK, ref_labels=["verifying"] * 5)
+        a = score_completion(completion(PERFECT_STEPS), TASK, truncated=False)
+        b = score_completion(completion(PERFECT_STEPS), with_ref, truncated=False)
+        self.assertEqual(a.reward, b.reward)
+
+    def test_unclosed_scores_zero(self):
         self.assertEqual(score_completion(completion(PERFECT_STEPS, close=False), TASK, truncated=False).reward, 0.0)
 
-    def test_untagged_and_invented_tags_lower_tag_rate(self):
-        steps = PERFECT_STEPS[:3] + ["No tag on this step.", "[made_up_label] Invented tag."]
-        b = score_completion(completion(steps), TASK, truncated=False)
-        self.assertAlmostEqual(b.tag_rate, 3 / 5)
-        self.assertAlmostEqual(b.invented_tag_rate, 1 / 5)
-        self.assertLess(b.reward, 1.0)
+    def test_truncated_is_left_out_of_the_logged_reward(self):
+        # The trainer drops a cut-off completion from the batch; its reward is a placeholder.
+        b = score_completion(completion(PERFECT_STEPS), TASK, truncated=True)
+        self.assertNotIn("reward", b.metrics())
+        self.assertEqual(b.metrics()["truncated"], 1.0)
+        self.assertIn("reward", score_completion(completion(PERFECT_STEPS), TASK, truncated=False).metrics())
 
-    def test_label_drift_lowers_alignment(self):
-        drifted = [s.replace("[logical_deduction]", "[reflecting]") for s in PERFECT_STEPS]
-        b = score_completion(completion(drifted), TASK, truncated=False)
-        self.assertAlmostEqual(b.tag_rate, 1.0)
-        self.assertLess(b.label_alignment, 0.9)
+    def test_untagged_paragraphs_are_allowed(self):
+        # tag_rate is logged; untagged paragraphs between tagged ones keep the label term.
+        steps = PERFECT_STEPS[:2] + ["Some untagged thinking."] + PERFECT_STEPS[2:]
+        b = score_completion(completion(steps), TASK, truncated=False)
+        ref = score_completion(completion(PERFECT_STEPS), TASK, truncated=False)
+        self.assertAlmostEqual(b.tag_rate, 5 / 6)
+        self.assertAlmostEqual(b.label_mix, ref.label_mix)
+        self.assertAlmostEqual(b.reward, ref.reward)
+        self.assertIn("tag_rate", b.metrics())
+
+    def test_no_labels_scores_only_the_correctness_weight(self):
+        b = score_completion(completion(["No tags anywhere.", "Still none."]), TASK, truncated=False)
+        self.assertFalse(b.label_valid)
+        self.assertAlmostEqual(b.reward, 0.8)
 
     def test_boxed_inside_thought_does_not_count(self):
         steps = PERFECT_STEPS[:-1] + ["[concluding] So \\boxed{9}."]
         b = score_completion(completion(steps, answer="I am not sure."), TASK, truncated=False)
         self.assertFalse(b.answer_correct)
 
-    def test_prose_answer_drops_correctness_term(self):
-        task = {"answer": "\\text{P and Q cannot both be true.}", "ref_labels": REF}
+    def test_uncheckable_answer_scores_the_label_term_alone(self):
+        task = {"answer": "\\text{P and Q cannot both be true.}"}
         b = score_completion(completion(PERFECT_STEPS, answer="Proof done."), task, truncated=False)
         self.assertFalse(b.answer_checkable)
         self.assertAlmostEqual(b.reward, 1.0)
+        b = score_completion(completion(["No tags."], answer="Proof done."), task, truncated=False)
+        self.assertAlmostEqual(b.reward, 0.0)
         self.assertNotIn("answer_correct", b.metrics())
 
     def test_weights_are_respected(self):
         wrong = completion(PERFECT_STEPS, answer="wrong")
-        b = score_completion(wrong, TASK, truncated=False, weights=RewardWeights(align=1.0, correct=0.0))
+        b = score_completion(wrong, TASK, truncated=False, weights=RewardWeights(label=1.0, correct=0.0))
         self.assertAlmostEqual(b.reward, 1.0)
-        b = score_completion(wrong, TASK, truncated=False, weights=RewardWeights(align=0.0, correct=1.0))
-        self.assertAlmostEqual(b.reward, 0.0)
-
-    def test_reward_is_half_alignment_half_correctness(self):
-        drifted = [s.replace("[logical_deduction]", "[reflecting]") for s in PERFECT_STEPS]
-        b = score_completion(completion(drifted), TASK, truncated=False)
-        self.assertAlmostEqual(b.reward, 0.5 * b.label_alignment + 0.5)
-
-    def test_tag_rate_is_logged_but_not_rewarded(self):
-        # Untagged paragraphs between tagged ones lower tag_rate but leave the reward alone.
-        steps = PERFECT_STEPS[:2] + ["Some untagged thinking."] + PERFECT_STEPS[2:]
-        b = score_completion(completion(steps), TASK, truncated=False)
-        self.assertAlmostEqual(b.tag_rate, 5 / 6)
+        b = score_completion(completion(PERFECT_STEPS), TASK, truncated=False, weights=RewardWeights(label=0.0, correct=1.0))
         self.assertAlmostEqual(b.reward, 1.0)
-        self.assertIn("tag_rate", b.metrics())
 
 
 class InvalidLabelTest(unittest.TestCase):
@@ -118,11 +127,12 @@ class InvalidLabelTest(unittest.TestCase):
         text = completion(PERFECT_STEPS, answer="[thinking] The answer is $\\boxed{9}$.")
         self.assertEqual(invalid_labels(text), [])
 
-    def test_an_invalid_label_scores_zero(self):
+    def test_an_invalid_label_loses_the_label_weight(self):
         text = completion(PERFECT_STEPS[:-1] + ["[summary] There are 9 divisors."])
         b = score_completion(text, TASK, truncated=False)
         self.assertTrue(b.answer_correct)
-        self.assertEqual(b.reward, 0.0)
+        self.assertFalse(b.label_valid)
+        self.assertAlmostEqual(b.reward, 0.8)
         self.assertEqual(b.metrics()["invalid_label"], 1.0)
 
 
@@ -180,11 +190,23 @@ class MathVerifyTest(unittest.TestCase):
         self.assertTrue(b.answer_correct)
 
 
-class SimilarityTest(unittest.TestCase):
-    def test_sequence_similarity_ignores_run_lengths(self):
-        a = ["reflecting", "reflecting", "verifying"]
-        b = ["reflecting", "verifying", "verifying", "verifying"]
-        self.assertAlmostEqual(sequence_similarity(a, b), 1.0)
+class LabelMixTest(unittest.TestCase):
+    def test_prior_is_a_distribution_over_the_eight_labels(self):
+        self.assertEqual(len(LABEL_PRIOR), 8)
+        self.assertAlmostEqual(sum(LABEL_PRIOR.values()), 1.0)
+
+    def test_matching_the_target_scores_one(self):
+        labels = ["reflecting", "verifying", "verifying", "concluding"]
+        target = {"reflecting": 0.25, "verifying": 0.5, "concluding": 0.25}
+        self.assertAlmostEqual(label_mix_similarity(labels, target), 1.0)
+
+    def test_a_natural_mix_beats_a_single_label(self):
+        natural = [label for label, share in LABEL_PRIOR.items() for _ in range(round(share * 100))]
+        one_label = ["logical_deduction"] * len(natural)
+        self.assertGreater(label_mix_similarity(natural), 0.95)
+        # All one label: the similarity is just that label's target share.
+        self.assertAlmostEqual(label_mix_similarity(one_label), LABEL_PRIOR["logical_deduction"])
+        self.assertEqual(label_mix_similarity([]), 0.0)
 
 
 if __name__ == "__main__":

@@ -37,22 +37,33 @@ use verl's paths.
 
 ## 2. The reward
 
-The reward is unchanged from the PPO version: a rule-based score of how well the chain
-of thought follows the annotated labels, plus answer correctness.
+A rule-based score of two things: whether the chain of thought uses only the eight
+labels (weight 0.2), and whether the final answer is right (weight 0.8). No reference
+trace is used.
 
 ```
-R = 0                                                                if the thought never closes or hits 8,192 tokens
-R = 0.5·label_alignment + 0.5·answer_correct                         otherwise
+not trained on                                                       if the answer hits 8,192 tokens
+R = 0                                                                if the thought never closes
+R = 0.2·label_valid + 0.8·answer_correct                             otherwise
 ```
+
+An answer cut off at the length limit is dropped from the training batch
+(`MASK_TRUNCATED=true`, rLLM's compact filtering) rather than scored 0: it gets no
+gradient and does not enter its group's mean and std. Validation still counts it as
+wrong.
 
 The tag format is a rule, not a reward term: an answer whose thought has a tag outside
 the eight labels is thrown away and sampled again (up to `MAX_LABEL_RETRIES` = 3 times);
-only the kept sample is trained on, and one still invalid after the last retry scores 0.
+only the kept sample is trained on, and one still invalid after the last retry gets
+`label_valid` = 0.
 
 - `tag_rate` (logged, not rewarded): the share of paragraphs that open with one of the
   eight tags.
-- `label_alignment`: the similarity of the label mix and order to the annotation of the
-  same question.
+- `label_valid`: 1 if the thought has at least one tag and every tag is one of the eight
+  labels, else 0. Which labels are used, and how often, does not matter.
+- `label_mix` (logged, not rewarded): 1 minus the total-variation distance between the
+  label shares in the thought and their average share in an annotated bespoke-v2 trace
+  (`LABEL_PRIOR`, from `src/compute_label_prior.py`).
 - `answer_correct`: whether the final answer after `</think>` equals the reference answer.
   Only the final answer is judged, not the reasoning; equivalence comes from Hugging Face
   `math_verify` (0.5 = 1/2), with the string matcher of `../../train/evaluate` as a second
@@ -85,11 +96,20 @@ switches it off.
   tokens, not with the number of sequences.
 
 The pod requests 8 CPUs, 160 GiB RAM (including a 24 GiB `/dev/shm` for Ray's 16 GiB
-object store) and one L40 or L40S. The design target was an A100-80GB, but the namespace's
-A100 quota is 0, and L40s need no quota (an RTX A6000 works the same way; see the comment
-in `k8s/job.yaml`). 48 GB is tight for 8,192-token responses; if the
-full run runs out of memory, lower `MAX_RESPONSE_LENGTH` or go back to A100-80GB (see the
-comment in `k8s/job.yaml`).
+object store) and one GPU chosen by `GPU_TYPE`: L40 / L40S by default, RTX A6000, or
+A100-80GB. `GPU_TYPE=a100` runs at priority `opportunistic` (no quota needed,
+preemptible) unless `GPU_PRIORITY_CLASS=` is set empty; the namespace has had an A100
+quota of 4 since 2026-10-05. The 48 GB cards need no quota. 48 GB is tight for
+8,192-token responses; if the full run runs out of memory, lower `MAX_RESPONSE_LENGTH` or
+use `GPU_TYPE=a100`.
+
+**Full-parameter training** (`LORA_RANK=0`, `ACTOR_LR=1e-6`) does not fit one card: fp32
+weights, gradients and Adam state of the 8B model are ~128 GB. It runs either on
+`N_GPUS=4` A100-80GB cards of one node (FSDP1, the state moves to host RAM only while vLLM
+generates), or on `N_GPUS=2` with `FSDP_CPU_OFFLOAD=true` (FSDP2 `CPUOffloadPolicy`: the
+state stays in pinned host RAM, each layer is copied to the GPU while it is computed, and
+Adam steps on the CPU). Both with 16 CPUs and 256 GiB RAM, a separate frozen reference
+model (CPU-offloaded by verl), and one vLLM replica per card.
 
 ## 4. What is custom, and why
 
@@ -104,17 +124,19 @@ Nothing in rLLM or verl is edited.
 ## 5. Data
 
 `src/prepare_data.py` (run through `../run.sh data`) reads `../train/bespoke-v2` and writes
-one task per line: `id`, `data_source`, `question`, `answer`, `ref_labels`.
+one task per line: `id`, `data_source`, `question`, `answer`, `ref_labels`. The reward no
+longer reads `ref_labels`; the field is left in place.
 
 - The prompt is the bare question, exactly as in SFT.
 - The split reuses the SFT held-out ids: 5,042 train and 102 validation. The validation
   questions were never trained on in either stage.
 
-`src/prepare_grpo_try.py` builds the same format from the 9 traces in `../grpo_try/`
-(6 train, 3 validation) into `data/grpo_try/`. Their answers come from the upstream harbor
-solutions, and each task also carries `ref_cot` (the reference reasoning with each span's
-label in front of it) and `solution`. Usage is in the
-[root README](../README.md#training-on-grpo_try).
+`src/prepare_grpo_try.py` builds `data/grpo_try/` from the 9 questions in `../grpo_try/`
+(6 train, 3 validation) with only what training needs: `id`, `data_source`, `prompt` (the
+chat-format input, one user turn holding the question), `question` and `answer`. No
+reference trace or labels are written. Answers come from the upstream harbor solutions.
+The workflow uses a task's `prompt` when it has one and otherwise the bare question.
+Usage is in the [root README](../README.md#training-on-grpo_try).
 
 ## 6. Cost
 
@@ -125,17 +147,22 @@ and the update. My estimate is **~10–12 minutes per step**, so the default cap
 630 steps. Treat these numbers as a guess until the smoke test reports `timing_s/*`.
 
 One actor checkpoint is ~33 GB, because FSDP keeps the LoRA-wrapped 8B in fp32. Only the
-latest is kept, on the 150 Gi PVC `qwen-grpo-data`.
+latest is kept, on the 150 Gi PVC `qwen-grpo-data`. A full-parameter checkpoint would be
+~100 GB with the Adam state; verl keeps the previous checkpoint until the next one is
+written, so full-parameter runs save only the weights and the training position (~33 GB)
+unless `CKPT_SAVE_OPTIMIZER=true`. A resumed run then restarts Adam's moments.
 
 ## Verification
 
 Done locally, without a GPU:
 
 - **Reward and data.**
-  - `../run.sh test`: 32 unit tests (reward incl. the invalid-label rule and the
-    math_verify answer check, the regenerate loop in the workflow, the grpo_try task
-    builder and its format check). The 4 math_verify tests need Python >= 3.10 and the 3
-    workflow tests need rLLM; both are skipped without them.
+  - `../run.sh test`: 37 unit tests (reward incl. the 0.2 / 0.8 weights, the invalid-label
+    rule, cut-off answers left out of the logged reward and the math_verify answer check;
+    the workflow's regenerate loop, prompt handling and the overlong termination reason
+    the trainer filters on; the grpo_try task builder and its format check). The 4
+    math_verify tests need Python >= 3.10 and the 5 workflow tests need rLLM; both are
+    skipped without them.
   - `../run.sh data`: 5,042 / 102 tasks, split identical to SFT.
 - **Configuration.** rLLM's `unified` config (verl 0.8.0 `ppo_trainer` underneath) was
   composed with all 58 overrides from `entrypoint.sh`, for both the normal and the smoke
@@ -191,11 +218,12 @@ GRPO/
 ├── Dockerfile               verlai/verl:vllm020.dev2 + verl 0.8.0 + rLLM 3b40c37 (no-deps installs)
 ├── k8s/
 │   ├── pvc.yaml             150Gi PVC for outputs
-│   ├── job.yaml             training Job, 1x L40 / L40S (48 GB)
+│   ├── job.yaml             training Job, 1 GPU picked by GPU_TYPE (L40 / A6000 / A100)
 │   └── export-job.yaml      CPU Job: checkpoint -> HF model
 ├── src/
 │   ├── prepare_data.py      bespoke-v2 -> data/{train,validation}.jsonl
 │   ├── prepare_grpo_try.py  ../grpo_try -> data/grpo_try/{train,validation}.jsonl
+│   ├── compute_label_prior.py  bespoke-v2 -> target label mix of the reward (LABEL_PRIOR)
 │   ├── train_grpo.py        Hydra entry point: datasets, Ray, rLLM AgentTrainer(backend="verl")
 │   ├── entrypoint.sh        env -> Hydra overrides -> train_grpo.py
 │   ├── export_policy.py     verl checkpoint -> merged HF model
@@ -203,6 +231,6 @@ GRPO/
 │       ├── reward.py        the label-following reward (stdlib only)
 │       ├── workflow.py      rLLM Workflow: SFT-identical prompt, generation, scoring
 │       └── patches.py       final checkpoint for rLLM's verl backend
-├── tests/                 test_reward.py, test_prepare_grpo_try.py
+├── tests/                 test_reward.py, test_prepare_grpo_try.py, test_workflow.py
 └── data/                    generated, gitignored, baked into the image
 ```

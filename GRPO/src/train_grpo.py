@@ -28,8 +28,8 @@ DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 
 def reward_weights_from_env() -> dict[str, float]:
     return {
-        "align": float(os.environ.get("REWARD_W_ALIGN", "0.5")),
-        "correct": float(os.environ.get("REWARD_W_CORRECT", "0.5")),
+        "label": float(os.environ.get("REWARD_W_LABEL", "0.2")),
+        "correct": float(os.environ.get("REWARD_W_CORRECT", "0.8")),
     }
 
 

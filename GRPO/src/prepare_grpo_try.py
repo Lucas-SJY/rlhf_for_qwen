@@ -1,44 +1,40 @@
 #!/usr/bin/env python3
-"""Build a GRPO task set from the span annotations in grpo_try/.
+"""Build a GRPO task set from the questions in grpo_try/.
 
 grpo_try/ holds sample_*.json files in the bespoke-v2 layout (question + labelled spans),
 but without the reference answer. The answer is recovered by sample id from the upstream
 harbor dataset (``--solutions-dir``), whose ``solution`` ends in \\boxed{}, the same way
 ../train/src/merge_answers.py backfilled bespoke-v2.
 
-Each output line is one task dict in the format GRPO/src/train_grpo.py and the
-LabeledCoTWorkflow read, plus the labelled reference trace:
+Only what training needs is kept; the reference trace and its labels are not written,
+because the reward does not compare against a reference reasoning. Each output line is:
 
     id           source sample id; rLLM also uses it to group the GRPO samples of a question
     data_source  "grpo_try" (groups validation metrics: val/grpo_try/...)
-    question     the bare question, exactly as in SFT
+    prompt       the model input in chat format: [{"role": "user", "content": question}],
+                 exactly as in SFT (no system turn, no label instruction)
+    question     the bare question
     answer       reference final answer (the \\boxed{} content of the upstream solution);
                  "" when there is none, e.g. for coding questions. The reward then scores
-                 only the label terms for that task.
-    ref_labels   the annotated label of every span, in order (what the reward compares to)
-    ref_cot      the reference reasoning with each span's label in front of its text, in
-                 the SFT target format: "[label] text" blocks separated by blank lines
-    solution     the upstream reference solution ("" if not found). The full SFT-style
-                 target is "<think>\\n" + ref_cot + "\\n</think>\\n\\n" + solution.
+                 only the label term for that task.
 
-The split is by trace. By default the validation traces are the ones in
-../train/grpo_test.json, the held-out set of the step-level export of the same data, so
-both views of grpo_try hold out the same questions.
+The split is by trace. By default the validation traces are the three held out by the
+earlier step-level export of the same data (../train/grpo_test.json, since removed), so
+results stay comparable with the runs made on it. --split-from reads the ids from such
+a file instead; with neither, the split is random by trace.
 
-Format check. Every input file must be valid JSON with a string id and question and a
-list of spans, each an object with a string label and text (and integer start, end and
-token_count when present). A file that fails is reported with its location and skipped,
-or stops the run with --strict. A span with an unknown label or no text, or an id that
-does not match the file name, only produces a warning (the span is dropped, as in
-SFT). The written files are then read back line by line and checked against the task
-format above; any error there fails the run. --check-only runs just that last check on
-existing output. Stdlib only.
+Format check. Every input file must be valid JSON with a string id and question; the
+labelled spans are not used. A file that fails is reported with its location and
+skipped, or stops the run with --strict. An id that does not match the file name only
+produces a warning. The written files are then read back line by line and checked
+against the task format above; any error there fails the run. --check-only runs just
+that last check on existing output. Stdlib only.
 
 Usage (from the repository root):
     python3 GRPO/src/prepare_grpo_try.py
     python3 GRPO/src/prepare_grpo_try.py --strict
     python3 GRPO/src/prepare_grpo_try.py --check-only
-    python3 GRPO/src/prepare_grpo_try.py --split-from '' --val-ratio 0.3
+    python3 GRPO/src/prepare_grpo_try.py --val-ids '' --val-ratio 0.3
 """
 
 from __future__ import annotations
@@ -48,34 +44,16 @@ import json
 import random
 import re
 import sys
-from collections import Counter
 from pathlib import Path
 
-LABELS = (
-    "planning_next_step",
-    "restating_problem",
-    "recalling_knowledge",
-    "logical_deduction",
-    "reflecting",
-    "verifying",
-    "correcting_itself",
-    "concluding",
-)
-_BLANK_LINES = re.compile(r"\n\s*\n")
-_COT_BLOCK = re.compile(r"^\[([a-z_]+)\] \S")
-
 # Expected JSON types, for the format check.
-SAMPLE_FIELDS = {"id": str, "question": str, "spans": list}
-SPAN_FIELDS = {"label": str, "text": str}
-SPAN_INT_FIELDS = ("start", "end", "token_count")
+SAMPLE_FIELDS = {"id": str, "question": str}
 TASK_FIELDS = {
     "id": str,
     "data_source": str,
+    "prompt": list,
     "question": str,
     "answer": str,
-    "ref_labels": list,
-    "ref_cot": str,
-    "solution": str,
 }
 
 
@@ -86,9 +64,12 @@ def parse_args() -> argparse.Namespace:
                    default="../jianhong_harbor/harbor/datasets/bespoke-stratos-rest",
                    help="upstream dataset root holding <id>/environment/trajectory.json with a "
                         "'solution' field; empty skips answer recovery")
-    p.add_argument("--split-from", default="../train/grpo_test.json",
-                   help="step-level test file whose trace ids become the validation set; "
-                        "empty falls back to a seeded random split by trace")
+    p.add_argument("--val-ids", default="sample_008604,sample_013628,sample_014855",
+                   help="comma-separated validation trace ids; empty (and no --split-from) "
+                        "falls back to a seeded random split by trace")
+    p.add_argument("--split-from", default="",
+                   help="step-level test file (JSON list of {'id': 'sample_X_step_N'}) whose "
+                        "trace ids become the validation set; overrides --val-ids")
     p.add_argument("--val-ratio", type=float, default=0.3, help="only used without --split-from")
     p.add_argument("--output-dir", default="GRPO/data/grpo_try")
     p.add_argument("--data-source", default="grpo_try")
@@ -116,15 +97,14 @@ def _type_errors(obj: dict, fields: dict, where: str) -> list[str]:
 def check_sample(sample: object, name: str) -> tuple[list[str], list[str]]:
     """Check one parsed input file. Returns (errors, warnings).
 
-    An error makes the file unusable; a warning means a span is dropped or something
-    looks off but the task can still be built.
+    An error makes the file unusable; a warning means something looks off but the task
+    can still be built.
     """
     if not isinstance(sample, dict):
         return [f"{name}: top level is {type(sample).__name__}, expected an object"], []
     errors = _type_errors(sample, SAMPLE_FIELDS, name)
     if errors:
         return errors, []
-
     warnings = []
     if not sample["id"].strip():
         errors.append(f"{name}.id: empty")
@@ -132,30 +112,6 @@ def check_sample(sample: object, name: str) -> tuple[list[str], list[str]]:
         warnings.append(f"{name}.id: {sample['id']!r} does not match the file name")
     if not sample["question"].strip():
         errors.append(f"{name}.question: empty")
-
-    usable = 0
-    for i, span in enumerate(sample["spans"]):
-        where = f"{name}.spans[{i}]"
-        if not isinstance(span, dict):
-            errors.append(f"{where}: expected an object, got {type(span).__name__}")
-            continue
-        span_errors = _type_errors(span, SPAN_FIELDS, where)
-        for key in SPAN_INT_FIELDS:
-            value = span.get(key)
-            # bool is a subclass of int in Python, but not a valid offset or count.
-            if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
-                span_errors.append(f"{where}.{key}: expected int, got {type(value).__name__}")
-        if span_errors:
-            errors.extend(span_errors)
-            continue
-        if span["label"] not in LABELS:
-            warnings.append(f"{where}.label: unknown label {span['label']!r}, span dropped")
-        elif not span["text"].strip():
-            warnings.append(f"{where}.text: empty, span dropped")
-        else:
-            usable += 1
-    if not errors and not usable:
-        errors.append(f"{name}.spans: no span with a known label and text")
     return errors, warnings
 
 
@@ -173,28 +129,17 @@ def check_task(task: object, where: str) -> list[str]:
     for key in ("id", "data_source", "question"):
         if not task[key].strip():
             errors.append(f"{where}.{key}: empty")
-    labels = task["ref_labels"]
-    if not labels:
-        errors.append(f"{where}.ref_labels: empty")
-    unknown = [label for label in labels if label not in LABELS]
-    if unknown:
-        errors.append(f"{where}.ref_labels: unknown labels {unknown}")
-    # ref_cot must be exactly one "[label] text" block per ref_labels entry, in order.
-    cot_labels = []
-    for block in _BLANK_LINES.split(task["ref_cot"]):
-        match = _COT_BLOCK.match(block)
-        cot_labels.append(match.group(1) if match else None)
-    if cot_labels != labels:
-        if len(cot_labels) != len(labels):
-            detail = f"{len(cot_labels)} blocks for {len(labels)} ref_labels"
-        else:
-            i = next(i for i, (a, b) in enumerate(zip(cot_labels, labels)) if a != b)
-            detail = f"block {i} is {cot_labels[i]!r}, ref_labels[{i}] is {labels[i]!r}"
-        errors.append(f"{where}.ref_cot: '[label] text' blocks do not match ref_labels ({detail})")
-    expected_answer = (extract_boxed(task["solution"]) or "").strip()
-    if task["answer"] != expected_answer:
-        errors.append(f"{where}.answer: {task['answer']!r} is not the \\boxed{{}} content of "
-                      f"solution ({expected_answer!r})")
+    prompt = task["prompt"]
+    if not prompt:
+        errors.append(f"{where}.prompt: empty")
+    for i, message in enumerate(prompt):
+        if not (isinstance(message, dict) and set(message) == {"role", "content"}
+                and isinstance(message["role"], str) and isinstance(message["content"], str)):
+            errors.append(f"{where}.prompt[{i}]: expected {{'role': str, 'content': str}}")
+        elif message["role"] not in ("system", "user", "assistant"):
+            errors.append(f"{where}.prompt[{i}].role: unknown role {message['role']!r}")
+    if not errors and (prompt[-1]["role"] != "user" or prompt[-1]["content"] != task["question"]):
+        errors.append(f"{where}.prompt: the last turn must be the user turn holding the question")
     return errors
 
 
@@ -269,8 +214,11 @@ def extract_boxed(text: str) -> str | None:
     return None
 
 
-def load_solution(solutions_dir: str, sample_id: str, question: str) -> str:
-    """The upstream reference solution, or "" if it is missing, malformed or for another question."""
+def load_answer(solutions_dir: str, sample_id: str, question: str) -> str:
+    """The \\boxed{} answer of the upstream solution, or "" if there is none.
+
+    "" also when the upstream file is missing, malformed or for another question.
+    """
     if not solutions_dir:
         return ""
     path = Path(solutions_dir) / sample_id / "environment" / "trajectory.json"
@@ -287,43 +235,27 @@ def load_solution(solutions_dir: str, sample_id: str, question: str) -> str:
     # Ids are only trusted when the question matches as well.
     if str(upstream.get("question") or "").strip() != question:
         return ""
-    return (upstream.get("solution") or "").strip()
-
-
-def labelled_reasoning(spans: list[dict]) -> str:
-    """'[label] text' per span, blank-line separated, as in the SFT targets.
-
-    The reward splits a trace into steps at blank lines, so a blank line inside a span
-    is folded into a single newline to keep each labelled span one step.
-    """
-    pieces = [f"[{s['label']}] {_BLANK_LINES.sub(chr(10), s['text'].strip())}" for s in spans]
-    return "\n\n".join(pieces)
+    return (extract_boxed(upstream.get("solution") or "") or "").strip()
 
 
 def build_task(sample: dict, solutions_dir: str, data_source: str) -> dict | None:
     sample_id = str(sample.get("id") or "")
     question = (sample.get("question") or "").strip()
-    spans = [
-        s for s in (sample.get("spans") or [])
-        if (s.get("text") or "").strip() and s.get("label") in LABELS
-    ]
-    if not sample_id or not question or not spans:
+    if not sample_id or not question:
         return None
-    solution = load_solution(solutions_dir, sample_id, question)
     return {
         "id": sample_id,
         "data_source": data_source,
+        "prompt": [{"role": "user", "content": question}],
         "question": question,
-        "answer": (extract_boxed(solution) or "").strip(),
-        "ref_labels": [s["label"] for s in spans],
-        "ref_cot": labelled_reasoning(spans),
-        "solution": solution,
+        "answer": load_answer(solutions_dir, sample_id, question),
     }
 
 
-def load_val_ids(split_from: str) -> set[str] | None:
+def load_val_ids(split_from: str, val_ids: str) -> set[str] | None:
     if not split_from:
-        return None
+        ids = {i.strip() for i in val_ids.split(",") if i.strip()}
+        return ids or None
     path = Path(split_from)
     if not path.is_file():
         raise SystemExit(f"--split-from: {path} not found (pass --split-from '' for a random split)")
@@ -378,8 +310,11 @@ def main() -> None:
     if not tasks:
         raise SystemExit("no input file passed the format check")
 
-    val_ids = load_val_ids(args.split_from)
+    val_ids = load_val_ids(args.split_from, args.val_ids)
     if val_ids is not None:
+        missing = sorted(val_ids - {t["id"] for t in tasks})
+        if missing:
+            report("warning", [f"validation ids not among the tasks: {', '.join(missing)}"])
         val = [t for t in tasks if t["id"] in val_ids]
         train = [t for t in tasks if t["id"] not in val_ids]
     else:
@@ -406,16 +341,11 @@ def main() -> None:
     print(f"format check  : {len(files) - len(skipped)} input files OK, {len(warnings)} warning(s); "
           f"output OK")
     print(f"train / val   : {len(train)} / {len(val)} -> {out_dir}/"
-          f" (val traces {'from ' + args.split_from if val_ids is not None else 'random'})")
+          f" (val traces {'random' if val_ids is None else 'from ' + (args.split_from or '--val-ids')})")
     print(f"val traces    : {', '.join(t['id'] for t in val)}")
     no_answer = [t["id"] for t in tasks if not t["answer"]]
     print(f"with answer   : {len(tasks) - len(no_answer)} / {len(tasks)}"
           + (f" (label-only reward for: {', '.join(no_answer)})" if no_answer else ""))
-    counts = Counter(label for t in train for label in t["ref_labels"])
-    total = sum(counts.values())
-    print(f"reference label shares (train, {total} spans):")
-    for label, count in counts.most_common():
-        print(f"  {label:22s} {count / total:6.1%}")
 
 
 if __name__ == "__main__":

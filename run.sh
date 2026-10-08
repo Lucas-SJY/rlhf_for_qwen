@@ -34,9 +34,28 @@ fi
 JOB_NAME="${JOB_NAME:-qwen-grpo}"
 SFT_PVC_NAME="${SFT_PVC_NAME:-qwen-sft-data}"
 RL_PVC_NAME="${RL_PVC_NAME:-qwen-grpo-data}"
-# Training pod size; the defaults fit the 8B run.
+# Training pod size; the defaults fit the 8B LoRA run on one GPU.
 POD_CPU="${POD_CPU:-8}"
 POD_MEMORY="${POD_MEMORY:-160Gi}"
+# Cards on the one node the pod runs on (the entrypoint reads the same N_GPUS).
+N_GPUS="${N_GPUS:-1}"
+# GPU_TYPE picks the card. Without GPU_PRIORITY_CLASS in .env, a100 runs at priority
+# "opportunistic", which bypasses the GPU quota but can be preempted at any time; set
+# GPU_PRIORITY_CLASS= (empty) to run at normal priority within the namespace's A100 quota.
+GPU_TYPE="${GPU_TYPE:-l40}"
+case "${GPU_TYPE}" in
+  l40) GPU_RESOURCE=nvidia.com/gpu GPU_PRODUCTS="[NVIDIA-L40, NVIDIA-L40S]" ;;
+  a6000) GPU_RESOURCE=nvidia.com/rtxa6000 GPU_PRODUCTS="[NVIDIA-RTX-A6000]" ;;
+  a100)
+    GPU_RESOURCE=nvidia.com/a100 GPU_PRODUCTS="[NVIDIA-A100-SXM4-80GB, NVIDIA-A100-80GB-PCIe]"
+    GPU_PRIORITY_CLASS="${GPU_PRIORITY_CLASS-opportunistic}"
+    ;;
+  *)
+    echo "error: GPU_TYPE must be l40, a6000 or a100 (got '${GPU_TYPE}')" >&2
+    exit 1
+    ;;
+esac
+GPU_PRIORITY_CLASS="${GPU_PRIORITY_CLASS:-}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 BESPOKE_DIR="${BESPOKE_DIR:-../train/bespoke-v2}"
 SFT_SPLIT_DIR="${SFT_SPLIT_DIR:-../train/data_labeled_2}"
@@ -65,6 +84,10 @@ render() {
       -e "s|\${RL_PVC_NAME}|${RL_PVC_NAME}|g" \
       -e "s|\${POD_CPU}|${POD_CPU}|g" \
       -e "s|\${POD_MEMORY}|${POD_MEMORY}|g" \
+      -e "s|\${GPU_RESOURCE}|${GPU_RESOURCE}|g" \
+      -e "s|\${N_GPUS}|${N_GPUS}|g" \
+      -e "s|\${GPU_PRODUCTS}|${GPU_PRODUCTS}|g" \
+      -e "s|\${GPU_PRIORITY_CLASS}|${GPU_PRIORITY_CLASS}|g" \
       "$1"
 }
 

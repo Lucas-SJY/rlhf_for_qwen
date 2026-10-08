@@ -13,7 +13,11 @@ trainer gets the exact sampled token ids and their logprobs.
 The tag format is a rule, not a reward term: a completion whose thought has a tag
 outside the eight labels is thrown away and sampled again, up to ``max_label_retries``
 times. Only the kept completion becomes the trajectory; one that still has an invalid
-tag after the last retry scores 0.
+tag after the last retry gets no label credit in the reward.
+
+A completion cut off by the length limit ends the episode with
+MAX_RESPONSE_LENGTH_EXCEEDED; the trainer's compact filtering drops those episodes from
+the batch (entrypoint.sh, MASK_TRUNCATED), so they are neither rewarded nor penalised.
 """
 
 from __future__ import annotations
@@ -46,9 +50,10 @@ class LabeledCoTWorkflow(Workflow):
         engine = self.rollout_engine
         tokenizer = engine.tokenizer
 
-        # Bare question, default enable_thinking: the prompt stops at
+        # The task's chat-format prompt if it has one (grpo_try), else the bare question as
+        # one user turn (bespoke-v2). Default enable_thinking: the prompt stops at
         # "<|im_start|>assistant\n" and the model opens its own <think> block.
-        messages = [{"role": "user", "content": task["question"]}]
+        messages = list(task.get("prompt") or [{"role": "user", "content": task["question"]}])
         prompt_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         prompt_ids = tokenizer.encode(prompt_text, add_special_tokens=False)
 

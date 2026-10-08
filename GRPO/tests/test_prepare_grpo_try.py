@@ -29,13 +29,7 @@ QUESTION = "Return your final response within \\boxed{}. What is 4 + 5?"
 SAMPLE = {
     "id": "sample_000001",
     "question": QUESTION,
-    "spans": [
-        {"label": "restating_problem", "text": "We need 4 + 5."},
-        {"label": "logical_deduction", "text": "4 + 5 = 9.\n\nThat is all."},
-        {"label": "not_a_label", "text": "Dropped."},
-        {"label": "concluding", "text": "  "},
-        {"label": "concluding", "text": "So the answer is 9."},
-    ],
+    "spans": [{"label": "logical_deduction", "text": "4 + 5 = 9."}],
 }
 
 
@@ -45,71 +39,64 @@ def write_solution(root: Path, sample_id: str, question: str, solution: str) -> 
     (env / "trajectory.json").write_text(json.dumps({"question": question, "solution": solution}))
 
 
-class BuildTaskTest(unittest.TestCase):
-    def test_labels_prefix_their_span_and_answer_comes_from_solution(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write_solution(Path(tmp), "sample_000001", QUESTION, "Adding gives $\\boxed{9}$.")
-            task = build_task(SAMPLE, tmp, "grpo_try")
-        self.assertEqual(task["ref_labels"], ["restating_problem", "logical_deduction", "concluding"])
-        self.assertEqual(
-            task["ref_cot"],
-            "[restating_problem] We need 4 + 5.\n\n"
-            "[logical_deduction] 4 + 5 = 9.\nThat is all.\n\n"
-            "[concluding] So the answer is 9.",
-        )
-        self.assertEqual(task["answer"], "9")
-
-    def test_reference_trace_scores_full_reward(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            write_solution(Path(tmp), "sample_000001", QUESTION, "Adding gives $\\boxed{9}$.")
-            task = build_task(SAMPLE, tmp, "grpo_try")
-        reference = f"<think>\n{task['ref_cot']}\n</think>\n\n{task['solution']}"
-        self.assertAlmostEqual(score_completion(reference, task, truncated=False).reward, 1.0)
-
-    def test_no_answer_when_solution_missing_or_for_another_question(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            self.assertEqual(build_task(SAMPLE, tmp, "grpo_try")["answer"], "")
-            write_solution(Path(tmp), "sample_000001", "Another question?", "$\\boxed{1}$")
-            task = build_task(SAMPLE, tmp, "grpo_try")
-        self.assertEqual((task["answer"], task["solution"]), ("", ""))
-
-    def test_extract_boxed_keeps_nested_braces(self):
-        self.assertEqual(extract_boxed("so $\\boxed{\\dfrac{1}{13}}$."), "\\dfrac{1}{13}")
-        self.assertIsNone(extract_boxed("def solve(): pass"))
-
-
 def valid_task():
     with tempfile.TemporaryDirectory() as tmp:
         write_solution(Path(tmp), "sample_000001", QUESTION, "Adding gives $\\boxed{9}$.")
         return build_task(SAMPLE, tmp, "grpo_try")
 
 
+class BuildTaskTest(unittest.TestCase):
+    def test_only_prompt_question_and_answer_are_kept(self):
+        task = valid_task()
+        self.assertEqual(task, {
+            "id": "sample_000001",
+            "data_source": "grpo_try",
+            "prompt": [{"role": "user", "content": QUESTION}],
+            "question": QUESTION,
+            "answer": "9",
+        })
+
+    def test_no_answer_when_solution_missing_or_for_another_question(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(build_task(SAMPLE, tmp, "grpo_try")["answer"], "")
+            write_solution(Path(tmp), "sample_000001", "Another question?", "$\\boxed{1}$")
+            self.assertEqual(build_task(SAMPLE, tmp, "grpo_try")["answer"], "")
+
+    def test_reward_needs_nothing_but_the_task(self):
+        text = "<think>\n[logical_deduction] 4 + 5 = 9.\n\n[concluding] So 9.\n</think>\n\n$\\boxed{9}$"
+        b = score_completion(text, valid_task(), truncated=False)
+        self.assertTrue(b.answer_correct and b.label_valid)
+        self.assertAlmostEqual(b.reward, 1.0)
+
+    def test_extract_boxed_keeps_nested_braces(self):
+        self.assertEqual(extract_boxed("so $\\boxed{\\dfrac{1}{13}}$."), "\\dfrac{1}{13}")
+        self.assertIsNone(extract_boxed("def solve(): pass"))
+
+
 class FormatCheckTest(unittest.TestCase):
-    def test_input_structure_errors_and_span_warnings(self):
+    def test_input_errors_and_warnings(self):
         errors, _ = check_sample([1, 2], "sample_000009.json")
         self.assertIn("top level is list", errors[0])
 
-        bad = {"id": "sample_000009", "question": "q?",
-               "spans": [{"label": "concluding", "start": "5"}, "oops"]}
-        errors, _ = check_sample(bad, "sample_000009.json")
-        self.assertTrue(any("missing key 'text'" in e for e in errors))
-        self.assertTrue(any("start: expected int, got str" in e for e in errors))
-        self.assertTrue(any("spans[1]: expected an object" in e for e in errors))
+        errors, _ = check_sample({"id": "sample_000009", "question": 5}, "sample_000009.json")
+        self.assertTrue(any("question: expected str, got int" in e for e in errors))
+        errors, _ = check_sample({"id": "sample_000009"}, "sample_000009.json")
+        self.assertTrue(any("missing key 'question'" in e for e in errors))
 
         errors, warnings = check_sample(SAMPLE, "sample_000002.json")
         self.assertEqual(errors, [])
         self.assertTrue(any("does not match the file name" in w for w in warnings))
-        self.assertTrue(any("unknown label 'not_a_label'" in w for w in warnings))
-        self.assertTrue(any("text: empty" in w for w in warnings))
 
     def test_built_task_passes_and_tampered_tasks_fail(self):
         task = valid_task()
         self.assertEqual(check_task(task, "t"), [])
         cases = {
-            "ref_cot": dict(task, ref_cot=task["ref_cot"].replace("[concluding]", "[verifying]")),
-            "answer": dict(task, answer="10"),
-            "expected list": dict(task, ref_labels="concluding"),
-            "unexpected keys": dict(task, extra=1),
+            "unexpected keys": dict(task, ref_labels=["concluding"]),
+            "missing key 'prompt'": {k: v for k, v in task.items() if k != "prompt"},
+            "expected list": dict(task, prompt="What is 4 + 5?"),
+            "the last turn must be": dict(task, prompt=[{"role": "user", "content": "Another question?"}]),
+            "unknown role": dict(task, prompt=[{"role": "robot", "content": QUESTION}]),
+            "expected str": dict(task, answer=9),
         }
         for needle, tampered in cases.items():
             with self.subTest(needle):
@@ -138,7 +125,7 @@ class FormatCheckTest(unittest.TestCase):
                 (root / "in" / f"{sid}.json").write_text(json.dumps(dict(SAMPLE, id=sid)))
             (root / "in" / "sample_000002.json").write_text('{"id": "sample_000002",')
             argv = ["prepare_grpo_try.py", "--input-dir", str(root / "in"), "--solutions-dir", "",
-                    "--split-from", "", "--val-ratio", "0.5", "--output-dir", str(root / "out")]
+                    "--val-ids", "sample_000003", "--output-dir", str(root / "out")]
 
             stderr = io.StringIO()
             with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()), \

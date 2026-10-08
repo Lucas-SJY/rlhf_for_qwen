@@ -1,8 +1,9 @@
-# GRPO training Job: one pod, one L40 or L40S (48 GB). Same pattern as ../../train/k8s/job.yaml.
+# GRPO training Job: one pod, N_GPUS cards on one node (GPU_TYPE in .env: l40, a6000 or
+# a100). Same pattern as ../../train/k8s/job.yaml.
 #
 # Do not apply this file by hand -- ../run.sh substitutes ${IMAGE}, ${JOB_NAME},
-# ${SFT_PVC_NAME}, ${RL_PVC_NAME}, ${POD_CPU} and ${POD_MEMORY}, and creates the Secrets
-# it depends on:
+# ${SFT_PVC_NAME}, ${RL_PVC_NAME}, ${POD_CPU}, ${POD_MEMORY}, ${N_GPUS} and the GPU
+# settings derived from GPU_TYPE, and creates the Secrets it depends on:
 #   ./run.sh submit     just (re)submit
 #   ./run.sh            data + image + secrets + pvc + submit + logs
 #
@@ -20,17 +21,16 @@ spec:
       restartPolicy: Never
       imagePullSecrets:
         - name: nrp-registry
-      # L40 / L40S instead of A100-80GB: the namespace's A100 quota (ResourceQuota
-      # a100-limit) is 0, while nvidia.com/gpu has no quota, so the pod runs at normal
-      # priority and is never preempted. Both are Ada (flash-attn 2, bf16) with 48 GB, and
-      # their nodes run drivers >= 595 (CUDA 13.2). vLLM (8B weights + KV cache) and the
-      # LoRA actor (bf16 base weights, see entrypoint.sh) take turns on the card.
-      # nvidia.com/gpu covers every generic GPU type on NRP; the affinity keeps the pod on
-      # these two. Other cards, by replacing the resource key in requests and limits:
-      #   - RTX A6000 (48 GB): nvidia.com/rtxa6000, and drop the affinity (the key alone
-      #     selects A6000 nodes);
-      #   - A100-80GB once there is quota: nvidia.com/a100, with the affinity listing
-      #     NVIDIA-A100-SXM4-80GB and NVIDIA-A100-80GB-PCIe.
+      # The card comes from GPU_TYPE (see ../run.sh), which sets the resource key below,
+      # the allowed card models and the priority class:
+      #   l40   nvidia.com/gpu      L40 / L40S (48 GB)  no quota, normal priority
+      #   a6000 nvidia.com/rtxa6000 RTX A6000 (48 GB)   no quota, normal priority
+      #   a100  nvidia.com/a100     A100-80GB           quota 4; "opportunistic" unless
+      #                                                 GPU_PRIORITY_CLASS is set (empty =
+      #                                                 normal priority, not preemptible)
+      # All run drivers >= 595 (CUDA 13.2) and support flash-attn 2 and bf16. An empty
+      # priority class means the default.
+      priorityClassName: ${GPU_PRIORITY_CLASS}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -38,9 +38,7 @@ spec:
               - matchExpressions:
                   - key: nvidia.com/gpu.product
                     operator: In
-                    values:
-                      - NVIDIA-L40
-                      - NVIDIA-L40S
+                    values: ${GPU_PRODUCTS}
       containers:
         - name: trainer
           image: ${IMAGE}
@@ -50,20 +48,21 @@ spec:
             - secretRef:
                 name: grpo-env
           # CPU and RAM come from POD_CPU / POD_MEMORY in .env (default 8 / 160Gi, sized
-          # for the 8B run). Host memory holds whatever is not on the GPU at the moment: the
-          # offloaded actor (bf16 base ~16G plus the fp32 adapter and its Adam state),
-          # vLLM's sleeping weights (~16G), the Ray object store (/dev/shm,
+          # for the 8B LoRA run on one GPU). Host memory holds whatever is not on the GPU
+          # at the moment: the offloaded actor (LoRA: bf16 base ~16G plus the fp32 adapter
+          # and its Adam state; full-parameter: fp32 weights ~33G and Adam state ~66G),
+          # vLLM's sleeping weights (LoRA only, ~16G), the Ray object store (/dev/shm,
           # RAY_OBJECT_STORE_GB) and the Ray worker processes. There is no critic.
           # NRP policy: cpu limit/request ratio <= 1.2 and GPU requests == limits; keep all
           # equal.
           resources:
             requests:
-              nvidia.com/gpu: 1
+              ${GPU_RESOURCE}: ${N_GPUS}
               cpu: "${POD_CPU}"
               memory: ${POD_MEMORY}
               ephemeral-storage: 30Gi
             limits:
-              nvidia.com/gpu: 1
+              ${GPU_RESOURCE}: ${N_GPUS}
               cpu: "${POD_CPU}"
               memory: ${POD_MEMORY}
               ephemeral-storage: 30Gi

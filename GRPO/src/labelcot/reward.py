@@ -1,27 +1,28 @@
-"""Rule-based reward for "reason in labelled steps, the way the annotation does".
+"""Rule-based reward for "reason in labelled steps".
 
-The SFT model writes its thought as blank-line separated paragraphs, each opening with
-one of eight tags, e.g. ``[logical_deduction] 196 = 2^2 * 7^2 ...``. Every training
-question also carries the human/LLM annotation of the reference trace, i.e. the
-sequence of labels the reference reasoning used. The reward scores a completion on:
+The model writes its thought as blank-line separated paragraphs, each opening with one
+of eight tags, e.g. ``[logical_deduction] 196 = 2^2 * 7^2 ...``. No reference trace is
+used: a completion is scored only on whether its tags are valid and on its final answer.
 
-    tag      fraction of thought paragraphs that open with a valid tag
-    align    how closely the generated label sequence follows the annotated one:
-             mean of (1 - total variation distance between the two label histograms)
-             and a sequence similarity of the run-length collapsed label sequences
+    label    1 if the thought has at least one tag and every tag is one of the eight
+             labels, else 0 (no tags at all, or any tag outside the eight)
     correct  the final answer after </think> matches the reference answer; only the final
              answer is judged, with math_verify's equivalence (0.5 = 1/2 = \\frac{1}{2})
 
-    reward = w_align * align + w_correct * correct      (0.5 each)
+    reward = w_label * label + w_correct * correct      (0.2 and 0.8)
 
-tag is computed and logged as a diagnostic, but is not part of the reward.
+Untagged paragraphs between tagged ones are allowed. tag_rate (the share of paragraphs
+that open with a valid tag) and label_mix (how closely the label shares match the
+average annotated trace, LABEL_PRIOR) are logged as diagnostics, not rewarded.
 
-A completion that never closes its thought, or is cut off by the length limit, gets 0.
-A tag outside the eight labels is a format violation, not a reward term: the workflow
-regenerates such a completion (invalid_labels below), and one that still has an invalid
-tag after the retries gets 0 as well.
+A completion that never closes its thought gets 0. One cut off by the length limit is
+not scored at all: the trainer drops it from the batch (compact filtering, see
+entrypoint.sh), so its reward field is only a placeholder and it is left out of the
+logged reward. A tag outside the eight labels also makes the workflow regenerate the completion
+(invalid_labels below); one that still has an invalid tag after the retries is scored
+normally, i.e. without the label half.
 When the reference answer cannot be checked automatically (prose, proofs, code), the
-correctness term is dropped and the reward is the alignment term alone, so it stays in
+correctness term is dropped and the reward is the label term alone, so it stays in
 [0, 1] either way.
 
 Stdlib only apart from math_verify (Hugging Face), so it can be unit-tested on a laptop
@@ -31,7 +32,6 @@ the string matcher alone; the image always has it.
 
 from __future__ import annotations
 
-import difflib
 import re
 import threading
 from collections import Counter
@@ -51,6 +51,21 @@ LABELS = (
 )
 _LABEL_SET = frozenset(LABELS)
 
+# Target label mix for the logged label_mix diagnostic: the mean share of each label in one annotated
+# trace, over all 5,144 bespoke-v2 traces (201,250 spans). Recompute with
+# GRPO/src/compute_label_prior.py. Normalised below, so the rounding does not matter.
+_RAW_PRIOR = {
+    "logical_deduction": 0.2525,
+    "reflecting": 0.1999,
+    "planning_next_step": 0.1589,
+    "verifying": 0.1427,
+    "restating_problem": 0.0874,
+    "concluding": 0.0742,
+    "recalling_knowledge": 0.0722,
+    "correcting_itself": 0.0121,
+}
+LABEL_PRIOR = {label: _RAW_PRIOR[label] / sum(_RAW_PRIOR.values()) for label in LABELS}
+
 # A step opens with "[tag]" at the very start of its paragraph.
 # What counts as a tag at the start of a paragraph: a bracketed single word of 3+
 # letters, digits, "_" or "-" ("[thinking]", "[Planning_Next_Step]", "[self-check]"), or
@@ -67,15 +82,16 @@ def _opening_tag(paragraph: str) -> str | None:
     if " " in name and "_".join(name.lower().split()) not in _LABEL_SET:
         return None
     return name
+
+
 _PARAGRAPH_SPLIT = re.compile(r"\n\s*\n")
 
 
 @dataclass(frozen=True)
 class RewardWeights:
-    # Label alignment and answer correctness weigh 0.5 each. tag_rate is computed and
-    # logged, but not rewarded.
-    align: float = 0.5
-    correct: float = 0.5
+    # The final answer carries most of the reward; valid labels the rest.
+    label: float = 0.2
+    correct: float = 0.8
 
 
 @dataclass
@@ -86,9 +102,8 @@ class RewardBreakdown:
     n_steps: int
     tag_rate: float
     invented_tag_rate: float
-    label_dist_sim: float
-    label_seq_sim: float
-    label_alignment: float
+    label_valid: bool
+    label_mix: float
     answer_checkable: bool
     answer_correct: bool
     label_counts: dict[str, int] = field(default_factory=dict)
@@ -98,7 +113,6 @@ class RewardBreakdown:
     def metrics(self) -> dict[str, float]:
         """Flat float metrics for rLLM's per-episode logging (averaged per batch)."""
         out = {
-            "reward": self.reward,
             "closed_think": float(self.closed),
             "truncated": float(self.truncated),
             "n_steps": float(self.n_steps),
@@ -106,11 +120,14 @@ class RewardBreakdown:
             "invented_tag_rate": self.invented_tag_rate,
             "invalid_label": float(self.invented_tag_rate > 0),
             "label_retries": float(self.label_retries),
-            "label_dist_sim": self.label_dist_sim,
-            "label_seq_sim": self.label_seq_sim,
-            "label_alignment": self.label_alignment,
+            "label_valid": float(self.label_valid),
+            "label_mix": self.label_mix,
             "answer_checkable": float(self.answer_checkable),
         }
+        # A cut-off completion is dropped from training, so its placeholder reward would
+        # only drag the logged mean down.
+        if not self.truncated:
+            out["reward"] = self.reward
         # Only reported where it means something, so the batch mean is accuracy on
         # checkable questions rather than being diluted by prose answers.
         if self.answer_checkable:
@@ -181,38 +198,25 @@ def invalid_labels(text: str) -> list[str]:
     """Tags outside the eight labels that open a paragraph of the thought.
 
     The rule-based format check: LabeledCoTWorkflow regenerates a completion that has
-    any, and score_completion gives 0 to one that still has any after the retries.
-    Untagged paragraphs are allowed; only wrong tags fail.
+    any, and score_completion gives no label credit to one that still has any after the
+    retries. Untagged paragraphs are allowed; only wrong tags fail.
     """
     thought, _, _ = split_completion(text)
     return _scan_labels(thought)[1]
 
 
-def collapse_runs(labels: list[str]) -> list[str]:
-    """Merge consecutive repeats: [a, a, b, a] -> [a, b, a]."""
-    out: list[str] = []
-    for label in labels:
-        if not out or out[-1] != label:
-            out.append(label)
-    return out
+def label_mix_similarity(generated: list[str], target: dict[str, float] | None = None) -> float:
+    """1 - total variation distance between the generated label shares and ``target``.
 
-
-def histogram_similarity(generated: list[str], reference: list[str]) -> float:
-    """1 - total variation distance between the two label distributions."""
-    if not generated or not reference:
+    1.0 means the thought uses the eight labels in exactly the target proportions; a
+    thought with no valid tag scores 0.
+    """
+    if not generated:
         return 0.0
-    gen, ref = Counter(generated), Counter(reference)
-    n_gen, n_ref = len(generated), len(reference)
-    tvd = 0.5 * sum(abs(gen[l] / n_gen - ref[l] / n_ref) for l in LABELS)
+    target = target or LABEL_PRIOR
+    counts, n = Counter(generated), len(generated)
+    tvd = 0.5 * sum(abs(counts[label] / n - target.get(label, 0.0)) for label in LABELS)
     return max(0.0, 1.0 - tvd)
-
-
-def sequence_similarity(generated: list[str], reference: list[str]) -> float:
-    """Ratcliff/Obershelp similarity of the run-length collapsed label sequences."""
-    if not generated or not reference:
-        return 0.0
-    matcher = difflib.SequenceMatcher(None, collapse_runs(generated), collapse_runs(reference), autojunk=False)
-    return matcher.ratio()
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +374,7 @@ def answer_is_correct(answer: str, gold: str) -> bool:
 def answer_is_checkable(gold: str) -> bool:
     """Whether string matching can judge this reference answer.
 
-    About a fifth of bespoke-v2 answers are prose ("\\text{P and Q cannot both be
+    About 2 % of bespoke-v2 answers are prose ("\\text{P and Q cannot both be
     true.}") or long statements to be proven. Those cannot be scored by matching, so
     the correctness term is dropped for them instead of adding a constant 0.
     """
@@ -389,7 +393,7 @@ def answer_is_checkable(gold: str) -> bool:
 
 
 def score_completion(text: str, task: dict, truncated: bool, weights: RewardWeights | None = None) -> RewardBreakdown:
-    """Score one completion against its task (needs task['ref_labels'] and task['answer'])."""
+    """Score one completion against its task (needs only task['answer'])."""
     w = weights or RewardWeights()
     thought, answer, closed = split_completion(text)
 
@@ -399,24 +403,25 @@ def score_completion(text: str, task: dict, truncated: bool, weights: RewardWeig
     tag_rate = len(tagged) / n_steps if n_steps else 0.0
     invented_rate = invented / n_steps if n_steps else 0.0
 
-    reference = [label for label in (task.get("ref_labels") or []) if label in _LABEL_SET]
-    dist_sim = histogram_similarity(tagged, reference)
-    seq_sim = sequence_similarity(tagged, reference)
-    alignment = 0.5 * (dist_sim + seq_sim)
+    # The label half: some tag, and none outside the eight labels.
+    label_valid = bool(tagged) and not invented
+    label_mix = label_mix_similarity(tagged)
 
     gold = str(task.get("answer") or "")
     checkable = answer_is_checkable(gold)
     correct = bool(closed and checkable and answer_is_correct(answer, gold))
 
-    if truncated or not closed or invented:
-        # Cut off, no closed thought, or a tag outside the eight labels (the workflow
-        # regenerates those; one that still has one after the retries is not rewarded).
+    if truncated:
+        # Placeholder: the trainer masks length-truncated episodes out of the batch, so
+        # this value never reaches an advantage (MASK_TRUNCATED=false trains it as 0).
+        reward = 0.0
+    elif not closed:
         reward = 0.0
     elif checkable:
-        reward = w.align * alignment + w.correct * float(correct)
+        reward = w.label * float(label_valid) + w.correct * float(correct)
     else:
-        # No correctness term: the alignment term alone, which keeps R in [0, 1].
-        reward = alignment if w.align > 0 else 0.0
+        # No correctness term: the label term alone, which keeps R in [0, 1].
+        reward = float(label_valid) if w.label > 0 else 0.0
 
     return RewardBreakdown(
         reward=float(reward),
@@ -425,9 +430,8 @@ def score_completion(text: str, task: dict, truncated: bool, weights: RewardWeig
         n_steps=n_steps,
         tag_rate=tag_rate,
         invented_tag_rate=invented_rate,
-        label_dist_sim=dist_sim,
-        label_seq_sim=seq_sim,
-        label_alignment=alignment,
+        label_valid=label_valid,
+        label_mix=label_mix,
         answer_checkable=checkable,
         answer_correct=correct,
         label_counts=dict(Counter(tagged)),

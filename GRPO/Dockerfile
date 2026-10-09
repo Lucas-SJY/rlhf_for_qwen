@@ -51,6 +51,11 @@ RUN pip install --no-deps "rllm @ git+https://github.com/rllm-org/rllm.git@${RLL
 # and latex2sympy2_extended accepts 4.9.3 as well. sympy is already installed.
 RUN pip install --no-deps "math-verify==0.9.0" "latex2sympy2_extended==1.11.0"
 
+# Fixes to verl's source (checkpointing under FSDP2 CPU offload); see the script. It fails
+# the build if the code it patches has changed.
+COPY docker/patch_verl.py /tmp/patch_verl.py
+RUN python3 /tmp/patch_verl.py
+
 COPY src/ src/
 # The task set is a few MB, so it is baked into the image like the SFT data was.
 COPY data/ data/

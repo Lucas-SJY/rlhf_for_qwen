@@ -8,6 +8,8 @@
 
 # Generated task set (rebuild with ./run.sh data)
 GRPO/data/
+# Questions without a checkable answer, split off by GRPO/src/prepare_rest_grpo.py
+/no_answer/
 
 __pycache__/
 *.py[cod]

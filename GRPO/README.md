@@ -106,10 +106,11 @@ use `GPU_TYPE=a100`.
 **Full-parameter training** (`LORA_RANK=0`, `ACTOR_LR=1e-6`) does not fit one card: fp32
 weights, gradients and Adam state of the 8B model are ~128 GB. It runs either on
 `N_GPUS=4` A100-80GB cards of one node (FSDP1, the state moves to host RAM only while vLLM
-generates), or on `N_GPUS=2` with `FSDP_CPU_OFFLOAD=true` (FSDP2 `CPUOffloadPolicy`: the
-state stays in pinned host RAM, each layer is copied to the GPU while it is computed, and
-Adam steps on the CPU). Both with 16 CPUs and 256 GiB RAM, a separate frozen reference
-model (CPU-offloaded by verl), and one vLLM replica per card.
+generates, 16 CPUs / 256 GiB), or on 1–2 cards with `FSDP_CPU_OFFLOAD=true` (FSDP2
+`CPUOffloadPolicy`: the state stays in pinned host RAM, each layer is copied to the GPU
+while it is computed, and Adam steps on the CPU; one card: 14 CPUs / 288 GiB, ~240 GB of
+host RAM at peak). Both with a separate frozen reference model (CPU-offloaded by verl)
+and one vLLM replica per card.
 
 ## 4. What is custom, and why
 
@@ -118,8 +119,9 @@ model (CPU-offloaded by verl), and one vLLM replica per card.
 | `labelcot/workflow.py` renders the prompt with the checkpoint's own chat template | rLLM's `QwenChatTemplateParser` prepends a default "You are Qwen, created by Alibaba Cloud…" system turn the SFT model never saw. Generation still uses rLLM's token-in/token-out path, so training uses the exact sampled tokens and logprobs. |
 | `labelcot/patches.py` saves a final checkpoint | rLLM's verl backend saves only at multiples of `save_freq` and does nothing at the end of training, so up to 19 steps would be lost. It is applied inside the Ray actor that builds the trainer: `workflow.py` calls it on import, and the actor imports that module when it receives the workflow class. |
 | data as plain task dicts (`GRPO/data/*.jsonl`) | the unified trainer takes rLLM `Dataset` objects directly: no verl parquet, no dataset registry |
+| `docker/patch_verl.py` edits one line of verl at image build time | Under FSDP2 CPU offload (`FSDP_CPU_OFFLOAD=true`), verl's `FSDPEngine.save_checkpoint` moves the module to the GPU, which leaves it half on each device, and `state_dict()` fails ("Attempted to set the storage of a tensor on device cpu to a storage on different device cuda:0"); the first full-parameter run crashed this way at its step-10 checkpoint. The patch skips that move under CPU offload, as verl already does when syncing weights to vLLM (#5995). It runs in verl's GPU worker processes, which never import `labelcot`, so it cannot be a runtime patch; the build fails if the patched code changes. |
 
-Nothing in rLLM or verl is edited.
+rLLM is not edited; verl is, in that one place.
 
 ## 5. Data
 
@@ -137,6 +139,15 @@ chat-format input, one user turn holding the question), `question` and `answer`.
 reference trace or labels are written. Answers come from the upstream harbor solutions.
 The workflow uses a task's `prompt` when it has one and otherwise the bare question.
 Usage is in the [root README](../README.md#training-on-grpo_try).
+
+`src/prepare_rest_grpo.py` builds `data/rest_grpo/` in the same format from the 11,566
+Bespoke-Stratos-17k questions outside the SFT set (`../train/data_labeled_2`), read from
+the harbor dataset `bespoke-stratos-rest`, with a seeded 90/10 split. Questions without a
+checkable answer (the coding questions and prose or proof answers), which the reward
+could score on the label term alone, are moved to `../no_answer/` in the same split, so
+`data/rest_grpo/` keeps 4,786 train / 526 validation questions with one checkable answer
+(solutions that box several distinct values are moved too).
+Usage is in the [root README](../README.md#training-on-rest_grpo).
 
 ## 6. Cost
 
@@ -157,10 +168,11 @@ unless `CKPT_SAVE_OPTIMIZER=true`. A resumed run then restarts Adam's moments.
 Done locally, without a GPU:
 
 - **Reward and data.**
-  - `../run.sh test`: 37 unit tests (reward incl. the 0.2 / 0.8 weights, the invalid-label
+  - `../run.sh test`: 43 unit tests (reward incl. the 0.2 / 0.8 weights, the invalid-label
     rule, cut-off answers left out of the logged reward and the math_verify answer check;
     the workflow's regenerate loop, prompt handling and the overlong termination reason
-    the trainer filters on; the grpo_try task builder and its format check). The 4
+    the trainer filters on; the grpo_try and rest_grpo task builders and their format
+    checks). The 4
     math_verify tests need Python >= 3.10 and the 5 workflow tests need rLLM; both are
     skipped without them.
   - `../run.sh data`: 5,042 / 102 tasks, split identical to SFT.
@@ -216,13 +228,17 @@ GRPO/
 ├── README.md                this file
 ├── ALGORITHM.md             exact computation, losses, reward, hyperparameters
 ├── Dockerfile               verlai/verl:vllm020.dev2 + verl 0.8.0 + rLLM 3b40c37 (no-deps installs)
+├── docker/
+│   └── patch_verl.py        build-time fix: verl checkpoints under FSDP2 CPU offload
 ├── k8s/
 │   ├── pvc.yaml             150Gi PVC for outputs
-│   ├── job.yaml             training Job, 1 GPU picked by GPU_TYPE (L40 / A6000 / A100)
+│   ├── job.yaml             training Job, N_GPUS cards of GPU_TYPE (L40 / A6000 / A100)
 │   └── export-job.yaml      CPU Job: checkpoint -> HF model
 ├── src/
 │   ├── prepare_data.py      bespoke-v2 -> data/{train,validation}.jsonl
 │   ├── prepare_grpo_try.py  ../grpo_try -> data/grpo_try/{train,validation}.jsonl
+│   ├── prepare_rest_grpo.py bespoke-stratos-rest (non-SFT questions) -> data/rest_grpo/,
+│   │                        unanswerable ones -> ../no_answer/
 │   ├── compute_label_prior.py  bespoke-v2 -> target label mix of the reward (LABEL_PRIOR)
 │   ├── train_grpo.py        Hydra entry point: datasets, Ray, rLLM AgentTrainer(backend="verl")
 │   ├── entrypoint.sh        env -> Hydra overrides -> train_grpo.py
@@ -231,6 +247,7 @@ GRPO/
 │       ├── reward.py        the label-following reward (stdlib only)
 │       ├── workflow.py      rLLM Workflow: SFT-identical prompt, generation, scoring
 │       └── patches.py       final checkpoint for rLLM's verl backend
-├── tests/                 test_reward.py, test_prepare_grpo_try.py, test_workflow.py
+├── tests/                 test_reward.py, test_prepare_grpo_try.py, test_prepare_rest_grpo.py,
+│                          test_workflow.py
 └── data/                    generated, gitignored, baked into the image
 ```

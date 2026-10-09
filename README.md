@@ -95,9 +95,9 @@ All settings live in `.env` (template: `.env.example`).
 `LORA_RANK=0` updates all 8B weights instead of a LoRA adapter. fp32 weights, gradients and
 Adam state come to ~128 GB, more than one card holds. Two ways to fit it:
 
-| | 4 A100s, FSDP1 | 2 A100s, FSDP2 CPU offload |
+| | 4 A100s, FSDP1 | 1–2 A100s, FSDP2 CPU offload |
 |---|---|---|
-| settings | `N_GPUS=4` | `N_GPUS=2`, `FSDP_CPU_OFFLOAD=true`, `OMP_NUM_THREADS=6` |
+| settings | `N_GPUS=4` | `N_GPUS=1` or `2`, `FSDP_CPU_OFFLOAD=true`, `OMP_NUM_THREADS` = ~10 CPUs per card |
 | where weights / grads / Adam live during the update | on the GPUs, sharded 4 ways (~49 GB per card at the optimizer step) | in pinned host RAM; only the layers being computed are on the GPU |
 | optimizer step | GPU | CPU |
 | speed | faster | slower (host-device copies every pass, CPU Adam) |
@@ -110,9 +110,13 @@ LORA_RANK=0
 ACTOR_LR=1e-6
 GPU_TYPE=a100
 GPU_PRIORITY_CLASS=
-POD_CPU=16
-POD_MEMORY=256Gi
+POD_CPU=16          # 14 for one card
+POD_MEMORY=256Gi    # 288Gi with CPU offload on one card
 ```
+
+With CPU offload the host-RAM need does not shrink with fewer cards: the actor's fp32
+weights, gradients and Adam state (~132 GB), the CPU Adam step's temporaries (~33 GB) and
+the fp32 reference model (~33 GB) are all in host RAM, ~240 GB at peak.
 
 - The KL reference is a separate frozen copy of the SFT model, kept in host RAM (CPU
   offload) in both modes, and vLLM receives all weights after every update.
@@ -166,6 +170,50 @@ EPOCHS=20                 # 3 steps per epoch at TRAIN_BATCH_SIZE=2
 
 Validation metrics are then logged as `val/grpo_try/...`. `SMOKE_TEST=true` already uses
 2 questions per step, so it works on this set unchanged.
+
+## Training on rest_grpo
+
+`GRPO/data/rest_grpo/` holds the Bespoke-Stratos-17k questions the SFT data did not use:
+the full set has 16,710 samples, `../train/data_labeled_2` holds 5,144 of them, and the
+harbor dataset `../jianhong_harbor/harbor/datasets/bespoke-stratos-rest` holds exactly
+the other 11,566. `GRPO/src/prepare_rest_grpo.py` turns those into tasks in the grpo_try
+format (`id`, `data_source`, `prompt`, `question`, `answer`):
+
+```bash
+python3 GRPO/src/prepare_rest_grpo.py               # -> GRPO/data/rest_grpo/ and no_answer/
+python3 GRPO/src/prepare_rest_grpo.py --strict      # stop on the first malformed source file
+python3 GRPO/src/prepare_rest_grpo.py --check-only  # only check the existing output files
+python3 GRPO/src/prepare_rest_grpo.py --no-answer-dir ''  # keep every question in rest_grpo
+```
+
+- **Source.** The question and the `\boxed{}` answer come from each sample's
+  `environment/trajectory.json`; the reference reasoning is not written. Every id in
+  `../train/data_labeled_2/*.jsonl` is left out even if the source has it
+  (`--exclude-from`), so the set cannot overlap the SFT data (it does not: 0 excluded).
+- **Split.** Seeded random by question, 10 % validation: 10,409 train / 1,157 validation
+  over all 11,566 questions.
+- **Only checkable answers stay.** A question whose answer the reward cannot check
+  (`answer_is_checkable`) would be scored on the label term alone, so after the split it
+  is moved, unchanged and in the same split, to `no_answer/` at the repository root
+  (gitignored): all 5,395 coding questions ("Generate an executable Python function ..."),
+  which have no answer, plus 807 prose or proof answers (567 science, 240 math, e.g.
+  `\text{No}`), plus 52 questions whose solution boxes several distinct values (several
+  roots, multi-part questions), for which the last `\boxed{}` kept as the answer is
+  incomplete. `GRPO/data/rest_grpo/` keeps **4,786 train / 526 validation** questions:
+  5,065 math and 247 science with one short, checkable answer. `no_answer/` holds 5,623 /
+  631. The distribution before the separation is in `data_distrib.md`.
+- **Format check.** As for grpo_try: malformed source files are reported and skipped
+  (`--strict`: the run stops), and the written files are read back and checked.
+
+To train on it, add to `.env` and rebuild the image (the data is baked in):
+
+```bash
+TRAIN_FILE=/workspace/data/rest_grpo/train.jsonl
+VAL_FILE=/workspace/data/rest_grpo/validation.jsonl
+```
+
+Validation metrics are then logged as `val/rest_grpo/...`. Validating on all 526
+questions takes long at up to 8,192 tokens each; a smaller `VAL_FILE` keeps it cheap.
 
 ## What to watch in wandb
 

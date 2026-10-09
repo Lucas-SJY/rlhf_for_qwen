@@ -32,7 +32,7 @@ like the SFT model. GRPO then trains only this adapter.
 a separate frozen copy of the model as the reference policy, and vLLM receives the full
 weights after every update. fp32 weights, gradients and Adam state of the 8B model are
 ~128 GB, so this runs FSDP-sharded on `N_GPUS=4` A100-80GB cards (one vLLM replica per
-card), with `ACTOR_LR=1e-6`; or on 2 cards with `FSDP_CPU_OFFLOAD=true`, where FSDP2 keeps
+card), with `ACTOR_LR=1e-6`; or on 1–2 cards with `FSDP_CPU_OFFLOAD=true`, where FSDP2 keeps
 that state in host RAM and Adam steps on the CPU. The update is the same either way.
 
 There is **no critic (value model)** and **no learned reward model**. The baseline for

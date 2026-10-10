@@ -148,7 +148,8 @@ could score on the label term alone, are moved to `../no_answer/` in the same sp
 `data/rest_grpo/` keeps 4,776 train / 526 validation questions with one checkable answer
 (solutions that box several distinct values are moved too); 10 more training questions
 are held out in `../manual_inspection/` and never trained on.
-Usage is in the [root README](../README.md#training-on-rest_grpo).
+Usage is in the [root README](../README.md#training-on-rest_grpo); every set and its
+counts are in [../data_distrib.md](../data_distrib.md).
 
 ## 6. Cost
 

@@ -89,7 +89,7 @@ All settings live in `.env` (template: `.env.example`).
 | `N_GPUS` | 1 | cards on the one node the pod runs on; the Job requests this many and FSDP shards the actor across them, with one vLLM replica per card |
 | `FSDP_CPU_OFFLOAD`, `OMP_NUM_THREADS` | false, unset | true: FSDP2 with CPU offload. The actor's weights, gradients and Adam state stay in host RAM, layers go to the GPU only while computed, and Adam steps on the CPU with `OMP_NUM_THREADS` threads per worker (Ray's default is 1). Much less GPU memory, slower steps; see [Full-parameter training](#full-parameter-training) |
 | `POD_CPU`, `POD_MEMORY`, `RAY_OBJECT_STORE_GB`, `RAY_NUM_CPUS` | 8, `160Gi`, 16, unset | training pod size, sized for the 8B LoRA run on one card (the 4-card full-parameter run uses 16 / `256Gi`). A small model fits 4 / `64Gi` / 8 and schedules far more easily; with `POD_CPU` below 8 set `RAY_NUM_CPUS=8`, or Ray runs out of CPUs to hand to verl and vLLM |
-| `TRAIN_FILE`, `VAL_FILE` | `/workspace/data/{train,validation}.jsonl` | task files inside the image; see [Training on grpo_try](#training-on-grpo_try) |
+| `TRAIN_FILE`, `VAL_FILE` | `/workspace/data/{train,validation}.jsonl` | task files inside the image: bespoke-v2 by default, or [grpo_try](#training-on-grpo_try) / [rest_grpo](#training-on-rest_grpo) (the current runs); all sets and their counts are in [data_distrib.md](data_distrib.md) |
 
 ## Full-parameter training
 
@@ -196,19 +196,21 @@ python3 GRPO/src/prepare_rest_grpo.py --no-answer-dir ''  # keep every question 
 - **Only checkable answers stay.** A question whose answer the reward cannot check
   (`answer_is_checkable`) would be scored on the label term alone, so after the split it
   is moved, unchanged and in the same split, to `no_answer/` at the repository root
-  (gitignored): all 5,395 coding questions ("Generate an executable Python function ..."),
-  which have no answer, plus 807 prose or proof answers (567 science, 240 math, e.g.
-  `\text{No}`), plus 52 questions whose solution boxes several distinct values (several
-  roots, multi-part questions), for which the last `\boxed{}` kept as the answer is
-  incomplete. That leaves 4,786 train / 526 validation questions (5,065 math and 247
-  science) with one short, checkable answer. `no_answer/` holds 5,623 / 631. The
-  distribution before the separation is in `data_distrib.md`.
+  (gitignored): 5,410 questions without an answer (all 5,395 coding questions, "Generate
+  an executable Python function ...", and 15 science), 792 prose or proof answers (552
+  science, 240 math, e.g. `\text{No}`), and 52 questions whose solution boxes several
+  distinct values (several roots, multi-part questions), for which the last `\boxed{}`
+  kept as the answer is incomplete. `no_answer/` holds 5,623 / 631.
 - **Held out for manual inspection.** 10 of those training questions, drawn at random
   (seeded), are moved to `manual_inspection/` at the repository root and never trained
   on: `tasks.jsonl` in the task format, and `trajectories/<id>.json`, a copy of each
   upstream trajectory (question, DeepSeek-R1 reasoning, solution). The validation set is
   untouched. `GRPO/data/rest_grpo/` therefore has **4,776 train / 526 validation**
-  questions (`--inspect-count` changes the number, `--inspect-dir ''` holds out none).
+  questions, 4,560 / 495 math and 216 / 31 science (`--inspect-count` changes the number
+  held out, `--inspect-dir ''` holds out none).
+- **Breakdown.** [data_distrib.md](data_distrib.md) tabulates where every one of the
+  11,566 questions went, the composition of each set, and the distribution before the
+  separation.
 - **Format check.** As for grpo_try: malformed source files are reported and skipped
   (`--strict`: the run stops), and the written files are read back and checked.
 
@@ -219,8 +221,10 @@ TRAIN_FILE=/workspace/data/rest_grpo/train.jsonl
 VAL_FILE=/workspace/data/rest_grpo/validation.jsonl
 ```
 
-Validation metrics are then logged as `val/rest_grpo/...`. Validating on all 526
-questions takes long at up to 8,192 tokens each; a smaller `VAL_FILE` keeps it cheap.
+Validation metrics are then logged as `val/rest_grpo/...`. One validation pass over all
+526 questions (one answer each, up to 8,192 tokens) took ~25 min on one A100 and ~9 min on
+two; a smaller `VAL_FILE` keeps it cheaper. The SFT checkpoint scores pass@1 0.80–0.83 on
+it before training (three runs), 14–16 % of its answers cut off at the length limit.
 
 ## What to watch in wandb
 

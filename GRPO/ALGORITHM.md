@@ -290,7 +290,7 @@ answers trained on) and `batch/termination_reason/max_response_length_exceeded`.
 | data | questions per step | 8 | `rllm.data.train_batch_size` (`TRAIN_BATCH_SIZE`) |
 | | answers per question (group size) | 8 | `rllm.rollout.n` (`GROUP_SIZE`) |
 | | max prompt / response tokens | 2,048 / 8,192 | `rllm.data.max_prompt_length` / `max_response_length` |
-| | train / validation questions | 5,042 / 102 (SFT held-out ids); grpo_try: 6 / 3 | `GRPO/data/*.jsonl` (`TRAIN_FILE` / `VAL_FILE`) |
+| | train / validation questions | 5,042 / 102 (SFT held-out ids); grpo_try: 6 / 3; rest_grpo (current runs): 4,776 / 526 | `GRPO/data/*.jsonl` (`TRAIN_FILE` / `VAL_FILE`); see `../data_distrib.md` |
 | rollout | train sampling | T = 1.0, top-p 1.0, top-k off | `rllm.rollout.train.*` |
 | | validation sampling | 1 answer, T = 0.6, top-p 0.95, top-k 20 | `rllm.rollout.val.*`, `rllm.rollout.n_val` |
 | | vLLM GPU share while generating | 0.7 | `actor_rollout_ref.rollout.gpu_memory_utilization` |

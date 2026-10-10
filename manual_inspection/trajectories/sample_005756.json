@@ -1,0 +1,1297 @@
+{
+  "id": "sample_005756",
+  "model": "DeepSeek-R1",
+  "question": "Return your final response within \\boxed{}. Find all values of $x$ that satisfy \\[\\frac{x^2}{x+1} \\ge \\frac{2}{x-1} + \\frac{5}{4}.\\]",
+  "thought_trace": "Okay, so I need to solve the inequality \\(\\frac{x^2}{x+1} \\ge \\frac{2}{x-1} + \\frac{5}{4}\\). Hmm, this looks a bit complicated with rational expressions. Let me start by recalling that to solve such inequalities, I need to find where the left side is greater than or equal to the right side. But before anything, I should make sure about the domain restrictions because denominators can't be zero. \n\nFirst, let's note where the denominators are zero. For the left side, \\(x + 1 \\neq 0\\) so \\(x \\neq -1\\). For the right side, \\(x - 1 \\neq 0\\), so \\(x \\neq 1\\). Also, any common denominators when combining terms might introduce more restrictions. So the domain is all real numbers except \\(x = -1\\) and \\(x = 1\\).\n\nNext, I need to combine the terms into a single inequality so that I can analyze the sign. Let me subtract \\(\\frac{2}{x-1} + \\frac{5}{4}\\) from both sides to get:\n\n\\[\n\\frac{x^2}{x+1} - \\frac{2}{x-1} - \\frac{5}{4} \\ge 0\n\\]\n\nNow, I need to combine these fractions into a single rational expression. To do that, I should find a common denominator. The denominators are \\(x + 1\\), \\(x - 1\\), and 4. The least common denominator (LCD) would be \\(4(x + 1)(x - 1)\\). Let's rewrite each term with this LCD.\n\nFirst term: \\(\\frac{x^2}{x+1} = \\frac{x^2 \\cdot 4(x - 1)}{4(x + 1)(x - 1)} = \\frac{4x^2(x - 1)}{4(x + 1)(x - 1)}\\)\n\nSecond term: \\(-\\frac{2}{x - 1} = -\\frac{2 \\cdot 4(x + 1)}{4(x + 1)(x - 1)} = -\\frac{8(x + 1)}{4(x + 1)(x - 1)}\\)\n\nThird term: \\(-\\frac{5}{4} = -\\frac{5 \\cdot (x + 1)(x - 1)}{4(x + 1)(x - 1)} = -\\frac{5(x^2 - 1)}{4(x + 1)(x - 1)}\\)\n\nNow, combining all these terms over the common denominator:\n\n\\[\n\\frac{4x^2(x - 1) - 8(x + 1) - 5(x^2 - 1)}{4(x + 1)(x - 1)} \\ge 0\n\\]\n\nLet me expand and simplify the numerator step by step.\n\nStarting with \\(4x^2(x - 1)\\):\n\n\\(4x^2 \\cdot x = 4x^3\\)\n\n\\(4x^2 \\cdot (-1) = -4x^2\\)\n\nSo that term is \\(4x^3 - 4x^2\\).\n\nNext term: \\(-8(x + 1)\\):\n\n\\(-8 \\cdot x = -8x\\)\n\n\\(-8 \\cdot 1 = -8\\)\n\nSo that term is \\(-8x - 8\\).\n\nThird term: \\(-5(x^2 - 1)\\):\n\n\\(-5 \\cdot x^2 = -5x^2\\)\n\n\\(-5 \\cdot (-1) = +5\\)\n\nSo that term is \\(-5x^2 + 5\\).\n\nNow, combining all these:\n\n\\(4x^3 - 4x^2 - 8x - 8 -5x^2 +5\\)\n\nCombine like terms:\n\n- \\(4x^3\\) (only cubic term)\n- \\(-4x^2 -5x^2 = -9x^2\\)\n- \\(-8x\\) (only linear term)\n- \\(-8 +5 = -3\\)\n\nSo the numerator simplifies to \\(4x^3 -9x^2 -8x -3\\).\n\nTherefore, the inequality becomes:\n\n\\[\n\\frac{4x^3 -9x^2 -8x -3}{4(x + 1)(x - 1)} \\ge 0\n\\]\n\nNow, this is a rational inequality. To solve this, I need to factor the numerator and denominator, find the critical points where the expression is zero or undefined, and then test intervals between those points.\n\nFirst, let's try to factor the numerator \\(4x^3 -9x^2 -8x -3\\). Factoring cubics can be tricky. Let me use the Rational Root Theorem to check for possible rational roots. The possible rational roots are factors of the constant term divided by factors of the leading coefficient. So possible roots are \\(\\pm1, \\pm3, \\pm\\frac{1}{2}, \\pm\\frac{3}{2}, \\pm\\frac{1}{4}, \\pm\\frac{3}{4}\\).\n\nLet me test x = 3:\n\n\\(4(27) -9(9) -8(3) -3 = 108 -81 -24 -3 = 0. Oh, 108 - 81 is 27, 27 -24 is 3, 3 -3 is 0. So x = 3 is a root. Therefore, (x - 3) is a factor.\n\nNow, perform polynomial division or use synthetic division to factor out (x - 3) from 4x^3 -9x^2 -8x -3.\n\nUsing synthetic division with root 3:\n\nCoefficients: 4 | -9 | -8 | -3\n\nBring down 4.\n\nMultiply 4 by 3: 12. Add to -9: 3.\n\nMultiply 3 by 3: 9. Add to -8: 1.\n\nMultiply 1 by 3: 3. Add to -3: 0. So the cubic factors as (x - 3)(4x^2 + 3x + 1).\n\nTherefore, the numerator is (x - 3)(4x^2 + 3x + 1).\n\nNow, check if the quadratic factor can be factored further. The discriminant is \\(b^2 -4ac = 9 - 16 = -7\\). Since discriminant is negative, the quadratic doesn't factor over real numbers. So numerator is (x - 3)(4x^2 + 3x + 1).\n\nSo the inequality becomes:\n\n\\[\n\\frac{(x - 3)(4x^2 + 3x + 1)}{4(x + 1)(x - 1)} \\ge 0\n\\]\n\nSince \\(4x^2 + 3x + 1\\) is always positive (since the quadratic coefficient is positive and discriminant is negative), its sign doesn't change. So we can consider the inequality as:\n\n\\[\n\\frac{(x - 3)}{(x + 1)(x - 1)} \\ge 0\n\\]\n\nBut wait, because the original numerator had the quadratic term which is always positive. So the sign of the numerator is determined by (x - 3). So the inequality simplifies to:\n\n\\[\n\\frac{(x - 3)}{(x + 1)(x - 1)} \\ge 0\n\\]\n\nBut we need to remember that there was a factor of 4 in the denominator. Wait, let me check:\n\nOriginal denominator after combining was 4(x + 1)(x - 1). The numerator was (x - 3)(4x^2 + 3x +1). So the entire expression is:\n\n\\[\n\\frac{(x - 3)(4x^2 + 3x +1)}{4(x + 1)(x - 1)} \\ge 0\n\\]\n\nSince 4 is a positive constant, it doesn't affect the inequality direction or the sign. Similarly, the quadratic in the numerator is always positive, so it's equivalent to:\n\n\\[\n\\frac{(x - 3)}{(x + 1)(x - 1)} \\ge 0\n\\]\n\nBecause multiplying or dividing by positive quantities preserves the inequality. So effectively, the quadratic term and the 4 in the denominator can be disregarded for the purpose of determining the sign, as they are always positive.\n\nTherefore, the inequality reduces to:\n\n\\[\n\\frac{x - 3}{(x + 1)(x - 1)} \\ge 0\n\\]\n\nNow, this is a simpler rational inequality. Let's find the critical points where the expression is zero or undefined.\n\nThe numerator is zero when x - 3 = 0 ⇒ x = 3.\n\nThe denominator is zero when x + 1 = 0 ⇒ x = -1, or x - 1 = 0 ⇒ x = 1.\n\nSo the critical points are x = -1, 1, 3. These divide the real line into four intervals:\n\n1. \\( (-\\infty, -1) \\)\n2. \\( (-1, 1) \\)\n3. \\( (1, 3) \\)\n4. \\( (3, \\infty) \\)\n\nWe need to test the sign of the expression in each interval. Remember that x cannot be -1 or 1 as they make the denominator zero.\n\nLet me create a table to track the sign in each interval.\n\n| Interval       | Test Point | (x - 3) | (x + 1) | (x - 1) | Overall Expression |\n|----------------|------------|---------|---------|---------|--------------------|\n| (-∞, -1)       | x = -2     | -       | -       | -       | (-)/(-)(-) = (-)/(-) = positive? Wait, let's compute: |\n\nWait, the expression is \\(\\frac{x - 3}{(x + 1)(x - 1)}\\). For each test point, substitute into numerator and denominator:\n\nFor x = -2:\n\nNumerator: -2 - 3 = -5 (negative)\n\nDenominator: (-2 + 1)(-2 - 1) = (-1)(-3) = 3 (positive)\n\nSo overall: (-5)/3 = negative. Therefore, the expression is negative in (-∞, -1).\n\nFor (-1, 1), let's pick x = 0:\n\nNumerator: 0 - 3 = -3 (negative)\n\nDenominator: (0 + 1)(0 - 1) = (1)(-1) = -1 (negative)\n\nSo overall: (-3)/(-1) = 3 (positive). So expression is positive in (-1, 1).\n\nFor (1, 3), let's pick x = 2:\n\nNumerator: 2 - 3 = -1 (negative)\n\nDenominator: (2 + 1)(2 - 1) = 3 * 1 = 3 (positive)\n\nOverall: (-1)/3 = negative. So expression is negative in (1, 3).\n\nFor (3, ∞), pick x = 4:\n\nNumerator: 4 - 3 = 1 (positive)\n\nDenominator: (4 + 1)(4 - 1) = 5 * 3 = 15 (positive)\n\nOverall: 1/15 (positive). So expression is positive in (3, ∞).\n\nNow, the critical points:\n\nAt x = -1, x = 1: undefined (vertical asymptotes).\n\nAt x = 3: numerator is zero, so the expression is zero, which satisfies the inequality \\(\\ge 0\\).\n\nSo the intervals where the expression is ≥ 0 are:\n\n- (-1, 1): positive\n- [3, ∞): including x=3 where it's zero\n\nBut wait, we need to check if these intervals are within the domain. The original domain excluded x = -1 and x = 1. So the solution intervals are (-1, 1) union [3, ∞).\n\nHowever, wait a second! This conclusion is based on the reduced inequality \\(\\frac{x - 3}{(x + 1)(x - 1)} \\ge 0\\). But we need to check if this simplification is valid. Because earlier, the original inequality after combining was:\n\n\\[\n\\frac{(x - 3)(4x^2 + 3x +1)}{4(x + 1)(x - 1)} \\ge 0\n\\]\n\nBut since 4x² + 3x +1 is always positive, and 4 is positive, the sign is determined by (x - 3)/[(x + 1)(x - 1)]. So our conclusion holds. However, we need to make sure that in the original inequality, all steps are valid. For instance, when we combined the terms, we didn't multiply both sides by anything that could change the inequality direction, right? Because we only moved terms to one side and combined over a common denominator, which is a valid step.\n\nTherefore, the solution intervals are (-1, 1) and [3, ∞). However, I need to check if these intervals actually satisfy the original inequality. Sometimes, when dealing with inequalities involving rational functions, especially after manipulating them, there can be mistakes in the sign analysis, so it's a good idea to test points in the original inequality.\n\nLet me test a point in (-1, 1), say x = 0:\n\nOriginal inequality: \\(\\frac{0^2}{0 + 1} \\ge \\frac{2}{0 - 1} + \\frac{5}{4}\\)\n\nLeft side: 0 / 1 = 0\n\nRight side: 2 / (-1) + 5/4 = -2 + 1.25 = -0.75\n\nSo 0 ≥ -0.75, which is true.\n\nAnother test in (-1, 1): x = 0.5\n\nLeft side: (0.25) / (1.5) ≈ 0.1667\n\nRight side: 2 / (-0.5) + 1.25 = -4 + 1.25 = -2.75\n\n0.1667 ≥ -2.75: true.\n\nNow, test x = 2 (which is in (1,3) but according to our solution, this interval is not part of the solution). Original inequality at x=2:\n\nLeft side: 4 / 3 ≈ 1.333\n\nRight side: 2 / (1) + 5/4 = 2 + 1.25 = 3.25\n\nSo 1.333 ≥ 3.25? No, false. So (1,3) is correctly excluded.\n\nTest x = 4 (in [3, ∞)):\n\nLeft side: 16 / 5 = 3.2\n\nRight side: 2 / 3 + 5/4 ≈ 0.6667 + 1.25 = 1.9167\n\n3.2 ≥ 1.9167: true.\n\nTest x = 3:\n\nLeft side: 9 / 4 = 2.25\n\nRight side: 2 / 2 + 5/4 = 1 + 1.25 = 2.25\n\n2.25 ≥ 2.25: equality holds, so x=3 is included.\n\nNow, check a point near the excluded boundaries. For x approaching -1 from the right (e.g., x = -0.5):\n\nLeft side: (0.25) / (0.5) = 0.5\n\nRight side: 2 / (-1.5) + 1.25 ≈ -1.333 + 1.25 ≈ -0.083\n\n0.5 ≥ -0.083: true. So near -1, it's still valid. However, as x approaches -1 from the right, left side approaches infinity? Wait, no. Wait, x approaches -1 from the right (x > -1), denominator x +1 approaches 0 from positive side. Numerator x² approaches 1. So left side approaches 1 / 0+ = +∞. So near x = -1, left side is very large, which would definitely be greater than the right side. So the interval (-1,1) is correct.\n\nBut wait, when x approaches 1 from the left, what happens?\n\nTake x approaching 1 from the left (x = 0.9):\n\nLeft side: (0.81) / (1.9) ≈ 0.426\n\nRight side: 2 / (-0.1) + 1.25 = -20 + 1.25 = -18.75\n\nSo 0.426 ≥ -18.75: true. So near x=1 from left, it's true. However, according to our solution, x=1 is excluded, which is correct since original inequality is undefined there.\n\nBut let me check a point just above x=1, say x=1.5 (which is in (1,3)):\n\nLeft side: (2.25)/2.5 = 0.9\n\nRight side: 2/(0.5) + 1.25 = 4 + 1.25 = 5.25\n\n0.9 ≥ 5.25? No, false. So (1,3) is correctly excluded.\n\nAnother test at x= -2 (excluded interval (-∞, -1)):\n\nLeft side: 4 / (-1) = -4\n\nRight side: 2 / (-3) + 1.25 ≈ -0.666 + 1.25 ≈ 0.583\n\nSo -4 ≥ 0.583? No, false. So (-∞, -1) is correctly excluded.\n\nTherefore, the solution seems to be (-1, 1) union [3, ∞). However, let me check the original inequality again. When combining the terms, we had to subtract the right side, which is valid. But another approach is to multiply both sides by denominators, but that can be risky because the sign of the denominator affects the inequality direction.\n\nAlternatively, perhaps I should consider cross-multiplying, but with care about the sign of the denominators.\n\nWait, but since we moved all terms to one side and combined them, leading to the inequality \\(\\frac{(x - 3)}{(x + 1)(x - 1)} \\ge 0\\), which we analyzed.\n\nBut let's just recap: after simplification, the critical points are at x=-1,1,3, and the sign chart shows the expression is positive in (-1,1) and (3, ∞), and zero at x=3. Since the original inequality includes equality (≥0), x=3 is included. The intervals (-1,1) and [3, ∞) are solutions, excluding x=-1 and x=1.\n\nBut hold on, let me confirm once again. The original inequality was \\(\\frac{x^2}{x+1} \\ge \\frac{2}{x-1} + \\frac{5}{4}\\). When combining terms, we have to ensure that we didn't make any algebraic mistakes. Let me recheck the numerator expansion.\n\nOriginal numerator after combining over common denominator:\n\n4x^3 -4x^2 -8x -8 -5x^2 +5\n\nWait, let me recheck:\n\nFirst term: 4x^3 -4x^2\n\nSecond term: -8x -8\n\nThird term: -5x^2 +5\n\nCombine:\n\n4x^3 -4x^2 -5x^2 = 4x^3 -9x^2\n\n-8x\n\n-8 +5 = -3\n\nSo numerator is 4x^3 -9x^2 -8x -3. Then factored as (x -3)(4x^2 +3x +1). Correct.\n\nSo that part is okay.\n\nThen, the rest follows. Therefore, conclusion holds.\n\nTherefore, the solution set is \\( (-1, 1) \\cup [3, \\infty) \\).\n\nBut wait, hold on! Let me check x approaching -1 from the right. For example, x = -0.5:\n\nLeft side: (0.25)/(0.5) = 0.5\n\nRight side: 2/(-1.5) + 1.25 ≈ -1.333 + 1.25 ≈ -0.083\n\nSo 0.5 ≥ -0.083: true.\n\nAnother test at x approaching 1 from the left, say x=0.9:\n\nLeft side: 0.81/1.9 ≈ 0.426\n\nRight side: 2/(-0.1) + 1.25 = -20 + 1.25 = -18.75\n\n0.426 ≥ -18.75: true.\n\nBut when x approaches -1 from the right, the left side becomes very large positive, so the inequality holds. Similarly, as x approaches 1 from the left, the left side approaches 1/(2), and the right side approaches negative infinity, so inequality holds.\n\nBut wait, there's something odd here. The interval (-1,1) is part of the solution, but in the original inequality, when x is between -1 and 1, the denominator x -1 becomes negative. So when we have terms like \\(\\frac{2}{x -1}\\), that term is negative. Similarly, the left side \\(\\frac{x^2}{x +1}\\) is positive because x +1 is positive in (-1,1), so left side is positive. So positive left side is greater than a negative right side, which is always true. Therefore, in the interval (-1,1), the original inequality reduces to positive ≥ negative + positive, which is always true. So the entire interval (-1,1) should be part of the solution. Similarly, for x >3, both sides are positive, so the inequality may or may not hold, but according to our analysis, it does.\n\nWait, but according to the original inequality, the left side is positive in (-1,1), and the right side is:\n\n\\(\\frac{2}{x -1} + \\frac{5}{4}\\). For x in (-1,1), x -1 is negative, so \\(\\frac{2}{x -1}\\) is negative. Then adding 5/4 (positive) to a negative. So depending on how negative it is, the right side could be negative or positive. However, for x in (-1,1):\n\nLet me compute the right side:\n\nAt x=0: 2/(-1) + 5/4 = -2 + 1.25 = -0.75 (negative)\n\nAt x approaching 1 from the left: 2/(x -1) approaches -infty, so right side approaches -infty + 1.25 = -infty\n\nAt x approaching -1 from the right: 2/(x -1) approaches 2/(-2) = -1, so right side approaches -1 + 1.25 = 0.25\n\nSo in (-1,1), the right side is from 0.25 down to -infty. So the right side is less than or equal to 0.25. The left side, which is \\(\\frac{x^2}{x +1}\\), in (-1,1):\n\nAt x approaching -1 from the right, denominator approaches 0+, numerator approaches 1, so left side approaches +infty.\n\nAt x=0: left side is 0.\n\nWait, hold on, this seems conflicting. When x approaches -1 from the right, left side approaches infinity, which is greater than any finite right side. But when x approaches 1 from the left, left side approaches \\(\\frac{1}{2}\\), and right side approaches -infty, so again left side is greater. However, at x=0, left side is 0, and right side is -0.75, so 0 ≥ -0.75 is true.\n\nBut wait, if x is in (-1,1), the left side is \\(\\frac{x^2}{x +1}\\). Since x +1 is positive (because x > -1), and x^2 is always non-negative, the left side is non-negative. The right side is \\(\\frac{2}{x -1} + \\frac{5}{4}\\). Since x -1 is negative, \\(\\frac{2}{x -1}\\) is negative, so the right side is negative plus a positive. The question is whether it can ever be positive. For example, if x is near -1, say x = -0.5:\n\nRight side: 2/(-1.5) + 1.25 ≈ -1.333 + 1.25 ≈ -0.083 (still negative). So even near x=-1, the right side is negative. Therefore, the right side is always negative in (-1,1), and the left side is non-negative. So non-negative is always ≥ negative. Therefore, the entire interval (-1,1) satisfies the original inequality. So our earlier conclusion is correct.\n\nTherefore, the solution set is indeed (-1,1) union [3, ∞).\n\nBut let me check another point in (-1,1), like x=0.5:\n\nLeft side: (0.25)/1.5 ≈ 0.1667\n\nRight side: 2/(-0.5) + 1.25 = -4 + 1.25 = -2.75\n\n0.1667 ≥ -2.75: true.\n\nAt x approaching 1 from the left:\n\nLeft side approaches \\(\\frac{1}{2}\\), right side approaches \\(-\\infty\\). So 1/2 ≥ -infty: true.\n\nAt x approaching -1 from the right:\n\nLeft side approaches +infty, right side approaches 0.25. So +infty ≥ 0.25: true.\n\nTherefore, (-1,1) is entirely part of the solution. Then, for x ≥3, we saw that the expression is positive. Therefore, the solution is correct.\n\nHowever, to make sure there are no mistakes in the algebra, let me re-examine the steps.\n\nOriginal inequality:\n\n\\(\\frac{x^2}{x+1} \\ge \\frac{2}{x-1} + \\frac{5}{4}\\)\n\nSubtracting the right side:\n\n\\(\\frac{x^2}{x+1} - \\frac{2}{x-1} - \\frac{5}{4} \\ge 0\\)\n\nCombined over common denominator 4(x+1)(x-1):\n\nNumerator: 4x^2(x -1) -8(x +1) -5(x^2 -1)\n\nExpanding:\n\n4x^3 -4x^2 -8x -8 -5x^2 +5\n\nCombine like terms:\n\n4x^3 -9x^2 -8x -3\n\nFactoring: (x -3)(4x^2 +3x +1)\n\nThen, since 4x² +3x +1 is positive, inequality reduces to (x -3)/[(x +1)(x -1)] ≥0.\n\nSign analysis leads to intervals (-1,1) and [3, ∞). All tests confirm this.\n\nTherefore, the solution is all real numbers x such that -1 < x < 1 or x ≥3.\n\nBut since the original inequality is undefined at x=-1 and x=1, these points are excluded. At x=3, the inequality becomes equality, so x=3 is included.\n\nThus, the final answer is \\(\\boxed{(-1, 1) \\cup [3, \\infty)}\\).\n\n**Final Answer**\n\\boxed{(-1, 1) \\cup [3, \\infty)}",
+  "segments": [
+    {
+      "i": 0,
+      "text": "Okay, so I need to solve the inequality \\(\\frac{x^2}{x+1} \\ge \\frac{2}{x-1} + \\frac{5}{4}\\)."
+    },
+    {
+      "i": 1,
+      "text": "Hmm, this looks a bit complicated with rational expressions."
+    },
+    {
+      "i": 2,
+      "text": "Let me start by recalling that to solve such inequalities, I need to find where the left side is greater than or equal to the right side."
+    },
+    {
+      "i": 3,
+      "text": "But before anything, I should make sure about the domain restrictions because denominators can't be zero."
+    },
+    {
+      "i": 4,
+      "text": "First, let's note where the denominators are zero."
+    },
+    {
+      "i": 5,
+      "text": "For the left side, \\(x + 1 \\neq 0\\) so \\(x \\neq -1\\)."
+    },
+    {
+      "i": 6,
+      "text": "For the right side, \\(x - 1 \\neq 0\\), so \\(x \\neq 1\\)."
+    },
+    {
+      "i": 7,
+      "text": "Also, any common denominators when combining terms might introduce more restrictions."
+    },
+    {
+      "i": 8,
+      "text": "So the domain is all real numbers except \\(x = -1\\) and \\(x = 1\\)."
+    },
+    {
+      "i": 9,
+      "text": "Next, I need to combine the terms into a single inequality so that I can analyze the sign."
+    },
+    {
+      "i": 10,
+      "text": "Let me subtract \\(\\frac{2}{x-1} + \\frac{5}{4}\\) from both sides to get:"
+    },
+    {
+      "i": 11,
+      "text": "\\[\n\\frac{x^2}{x+1} - \\frac{2}{x-1} - \\frac{5}{4} \\ge 0\n\\]"
+    },
+    {
+      "i": 12,
+      "text": "Now, I need to combine these fractions into a single rational expression."
+    },
+    {
+      "i": 13,
+      "text": "To do that, I should find a common denominator."
+    },
+    {
+      "i": 14,
+      "text": "The denominators are \\(x + 1\\), \\(x - 1\\), and 4."
+    },
+    {
+      "i": 15,
+      "text": "The least common denominator (LCD) would be \\(4(x + 1)(x - 1)\\)."
+    },
+    {
+      "i": 16,
+      "text": "Let's rewrite each term with this LCD."
+    },
+    {
+      "i": 17,
+      "text": "First term: \\(\\frac{x^2}{x+1} = \\frac{x^2 \\cdot 4(x - 1)}{4(x + 1)(x - 1)} = \\frac{4x^2(x - 1)}{4(x + 1)(x - 1)}\\)"
+    },
+    {
+      "i": 18,
+      "text": "Second term: \\(-\\frac{2}{x - 1} = -\\frac{2 \\cdot 4(x + 1)}{4(x + 1)(x - 1)} = -\\frac{8(x + 1)}{4(x + 1)(x - 1)}\\)"
+    },
+    {
+      "i": 19,
+      "text": "Third term: \\(-\\frac{5}{4} = -\\frac{5 \\cdot (x + 1)(x - 1)}{4(x + 1)(x - 1)} = -\\frac{5(x^2 - 1)}{4(x + 1)(x - 1)}\\)"
+    },
+    {
+      "i": 20,
+      "text": "Now, combining all these terms over the common denominator:"
+    },
+    {
+      "i": 21,
+      "text": "\\[\n\\frac{4x^2(x - 1) - 8(x + 1) - 5(x^2 - 1)}{4(x + 1)(x - 1)} \\ge 0\n\\]"
+    },
+    {
+      "i": 22,
+      "text": "Let me expand and simplify the numerator step by step."
+    },
+    {
+      "i": 23,
+      "text": "Starting with \\(4x^2(x - 1)\\):"
+    },
+    {
+      "i": 24,
+      "text": "\\(4x^2 \\cdot x = 4x^3\\)"
+    },
+    {
+      "i": 25,
+      "text": "\\(4x^2 \\cdot (-1) = -4x^2\\)"
+    },
+    {
+      "i": 26,
+      "text": "So that term is \\(4x^3 - 4x^2\\)."
+    },
+    {
+      "i": 27,
+      "text": "Next term: \\(-8(x + 1)\\):"
+    },
+    {
+      "i": 28,
+      "text": "\\(-8 \\cdot x = -8x\\)"
+    },
+    {
+      "i": 29,
+      "text": "\\(-8 \\cdot 1 = -8\\)"
+    },
+    {
+      "i": 30,
+      "text": "So that term is \\(-8x - 8\\)."
+    },
+    {
+      "i": 31,
+      "text": "Third term: \\(-5(x^2 - 1)\\):"
+    },
+    {
+      "i": 32,
+      "text": "\\(-5 \\cdot x^2 = -5x^2\\)"
+    },
+    {
+      "i": 33,
+      "text": "\\(-5 \\cdot (-1) = +5\\)"
+    },
+    {
+      "i": 34,
+      "text": "So that term is \\(-5x^2 + 5\\)."
+    },
+    {
+      "i": 35,
+      "text": "Now, combining all these:"
+    },
+    {
+      "i": 36,
+      "text": "\\(4x^3 - 4x^2 - 8x - 8 -5x^2 +5\\)"
+    },
+    {
+      "i": 37,
+      "text": "Combine like terms:"
+    },
+    {
+      "i": 38,
+      "text": "- \\(4x^3\\) (only cubic term)\n- \\(-4x^2 -5x^2 = -9x^2\\)\n- \\(-8x\\) (only linear term)\n- \\(-8 +5 = -3\\)"
+    },
+    {
+      "i": 39,
+      "text": "So the numerator simplifies to \\(4x^3 -9x^2 -8x -3\\)."
+    },
+    {
+      "i": 40,
+      "text": "Therefore, the inequality becomes:"
+    },
+    {
+      "i": 41,
+      "text": "\\[\n\\frac{4x^3 -9x^2 -8x -3}{4(x + 1)(x - 1)} \\ge 0\n\\]"
+    },
+    {
+      "i": 42,
+      "text": "Now, this is a rational inequality."
+    },
+    {
+      "i": 43,
+      "text": "To solve this, I need to factor the numerator and denominator, find the critical points where the expression is zero or undefined, and then test intervals between those points."
+    },
+    {
+      "i": 44,
+      "text": "First, let's try to factor the numerator \\(4x^3 -9x^2 -8x -3\\)."
+    },
+    {
+      "i": 45,
+      "text": "Factoring cubics can be tricky."
+    },
+    {
+      "i": 46,
+      "text": "Let me use the Rational Root Theorem to check for possible rational roots."
+    },
+    {
+      "i": 47,
+      "text": "The possible rational roots are factors of the constant term divided by factors of the leading coefficient."
+    },
+    {
+      "i": 48,
+      "text": "So possible roots are \\(\\pm1, \\pm3, \\pm\\frac{1}{2}, \\pm\\frac{3}{2}, \\pm\\frac{1}{4}, \\pm\\frac{3}{4}\\)."
+    },
+    {
+      "i": 49,
+      "text": "Let me test x = 3:"
+    },
+    {
+      "i": 50,
+      "text": "\\(4(27) -9(9) -8(3) -3 = 108 -81 -24 -3 = 0."
+    },
+    {
+      "i": 51,
+      "text": "Oh, 108 - 81 is 27, 27 -24 is 3, 3 -3 is 0."
+    },
+    {
+      "i": 52,
+      "text": "So x = 3 is a root."
+    },
+    {
+      "i": 53,
+      "text": "Therefore, (x - 3) is a factor."
+    },
+    {
+      "i": 54,
+      "text": "Now, perform polynomial division or use synthetic division to factor out (x - 3) from 4x^3 -9x^2 -8x -3."
+    },
+    {
+      "i": 55,
+      "text": "Using synthetic division with root 3:"
+    },
+    {
+      "i": 56,
+      "text": "Coefficients: 4 | -9 | -8 | -3"
+    },
+    {
+      "i": 57,
+      "text": "Bring down 4."
+    },
+    {
+      "i": 58,
+      "text": "Multiply 4 by 3: 12."
+    },
+    {
+      "i": 59,
+      "text": "Add to -9: 3."
+    },
+    {
+      "i": 60,
+      "text": "Multiply 3 by 3: 9."
+    },
+    {
+      "i": 61,
+      "text": "Add to -8: 1."
+    },
+    {
+      "i": 62,
+      "text": "Multiply 1 by 3: 3."
+    },
+    {
+      "i": 63,
+      "text": "Add to -3: 0."
+    },
+    {
+      "i": 64,
+      "text": "So the cubic factors as (x - 3)(4x^2 + 3x + 1)."
+    },
+    {
+      "i": 65,
+      "text": "Therefore, the numerator is (x - 3)(4x^2 + 3x + 1)."
+    },
+    {
+      "i": 66,
+      "text": "Now, check if the quadratic factor can be factored further."
+    },
+    {
+      "i": 67,
+      "text": "The discriminant is \\(b^2 -4ac = 9 - 16 = -7\\)."
+    },
+    {
+      "i": 68,
+      "text": "Since discriminant is negative, the quadratic doesn't factor over real numbers."
+    },
+    {
+      "i": 69,
+      "text": "So numerator is (x - 3)(4x^2 + 3x + 1)."
+    },
+    {
+      "i": 70,
+      "text": "So the inequality becomes:"
+    },
+    {
+      "i": 71,
+      "text": "\\[\n\\frac{(x - 3)(4x^2 + 3x + 1)}{4(x + 1)(x - 1)} \\ge 0\n\\]"
+    },
+    {
+      "i": 72,
+      "text": "Since \\(4x^2 + 3x + 1\\) is always positive (since the quadratic coefficient is positive and discriminant is negative), its sign doesn't change."
+    },
+    {
+      "i": 73,
+      "text": "So we can consider the inequality as:"
+    },
+    {
+      "i": 74,
+      "text": "\\[\n\\frac{(x - 3)}{(x + 1)(x - 1)} \\ge 0\n\\]"
+    },
+    {
+      "i": 75,
+      "text": "But wait, because the original numerator had the quadratic term which is always positive."
+    },
+    {
+      "i": 76,
+      "text": "So the sign of the numerator is determined by (x - 3)."
+    },
+    {
+      "i": 77,
+      "text": "So the inequality simplifies to:"
+    },
+    {
+      "i": 78,
+      "text": "\\[\n\\frac{(x - 3)}{(x + 1)(x - 1)} \\ge 0\n\\]"
+    },
+    {
+      "i": 79,
+      "text": "But we need to remember that there was a factor of 4 in the denominator."
+    },
+    {
+      "i": 80,
+      "text": "Wait, let me check:"
+    },
+    {
+      "i": 81,
+      "text": "Original denominator after combining was 4(x + 1)(x - 1)."
+    },
+    {
+      "i": 82,
+      "text": "The numerator was (x - 3)(4x^2 + 3x +1)."
+    },
+    {
+      "i": 83,
+      "text": "So the entire expression is:"
+    },
+    {
+      "i": 84,
+      "text": "\\[\n\\frac{(x - 3)(4x^2 + 3x +1)}{4(x + 1)(x - 1)} \\ge 0\n\\]"
+    },
+    {
+      "i": 85,
+      "text": "Since 4 is a positive constant, it doesn't affect the inequality direction or the sign."
+    },
+    {
+      "i": 86,
+      "text": "Similarly, the quadratic in the numerator is always positive, so it's equivalent to:"
+    },
+    {
+      "i": 87,
+      "text": "\\[\n\\frac{(x - 3)}{(x + 1)(x - 1)} \\ge 0\n\\]"
+    },
+    {
+      "i": 88,
+      "text": "Because multiplying or dividing by positive quantities preserves the inequality."
+    },
+    {
+      "i": 89,
+      "text": "So effectively, the quadratic term and the 4 in the denominator can be disregarded for the purpose of determining the sign, as they are always positive."
+    },
+    {
+      "i": 90,
+      "text": "Therefore, the inequality reduces to:"
+    },
+    {
+      "i": 91,
+      "text": "\\[\n\\frac{x - 3}{(x + 1)(x - 1)} \\ge 0\n\\]"
+    },
+    {
+      "i": 92,
+      "text": "Now, this is a simpler rational inequality."
+    },
+    {
+      "i": 93,
+      "text": "Let's find the critical points where the expression is zero or undefined."
+    },
+    {
+      "i": 94,
+      "text": "The numerator is zero when x - 3 = 0 ⇒ x = 3."
+    },
+    {
+      "i": 95,
+      "text": "The denominator is zero when x + 1 = 0 ⇒ x = -1, or x - 1 = 0 ⇒ x = 1."
+    },
+    {
+      "i": 96,
+      "text": "So the critical points are x = -1, 1, 3."
+    },
+    {
+      "i": 97,
+      "text": "These divide the real line into four intervals:"
+    },
+    {
+      "i": 98,
+      "text": "1."
+    },
+    {
+      "i": 99,
+      "text": "\\( (-\\infty, -1) \\)\n2."
+    },
+    {
+      "i": 100,
+      "text": "\\( (-1, 1) \\)\n3."
+    },
+    {
+      "i": 101,
+      "text": "\\( (1, 3) \\)\n4."
+    },
+    {
+      "i": 102,
+      "text": "\\( (3, \\infty) \\)"
+    },
+    {
+      "i": 103,
+      "text": "We need to test the sign of the expression in each interval."
+    },
+    {
+      "i": 104,
+      "text": "Remember that x cannot be -1 or 1 as they make the denominator zero."
+    },
+    {
+      "i": 105,
+      "text": "Let me create a table to track the sign in each interval."
+    },
+    {
+      "i": 106,
+      "text": "| Interval       | Test Point | (x - 3) | (x + 1) | (x - 1) | Overall Expression |\n|----------------|------------|---------|---------|---------|--------------------|\n| (-∞, -1)       | x = -2     | -       | -       | -       | (-)/(-)(-) = (-)/(-) = positive?"
+    },
+    {
+      "i": 107,
+      "text": "Wait, let's compute: |"
+    },
+    {
+      "i": 108,
+      "text": "Wait, the expression is \\(\\frac{x - 3}{(x + 1)(x - 1)}\\)."
+    },
+    {
+      "i": 109,
+      "text": "For each test point, substitute into numerator and denominator:"
+    },
+    {
+      "i": 110,
+      "text": "For x = -2:"
+    },
+    {
+      "i": 111,
+      "text": "Numerator: -2 - 3 = -5 (negative)"
+    },
+    {
+      "i": 112,
+      "text": "Denominator: (-2 + 1)(-2 - 1) = (-1)(-3) = 3 (positive)"
+    },
+    {
+      "i": 113,
+      "text": "So overall: (-5)/3 = negative."
+    },
+    {
+      "i": 114,
+      "text": "Therefore, the expression is negative in (-∞, -1)."
+    },
+    {
+      "i": 115,
+      "text": "For (-1, 1), let's pick x = 0:"
+    },
+    {
+      "i": 116,
+      "text": "Numerator: 0 - 3 = -3 (negative)"
+    },
+    {
+      "i": 117,
+      "text": "Denominator: (0 + 1)(0 - 1) = (1)(-1) = -1 (negative)"
+    },
+    {
+      "i": 118,
+      "text": "So overall: (-3)/(-1) = 3 (positive)."
+    },
+    {
+      "i": 119,
+      "text": "So expression is positive in (-1, 1)."
+    },
+    {
+      "i": 120,
+      "text": "For (1, 3), let's pick x = 2:"
+    },
+    {
+      "i": 121,
+      "text": "Numerator: 2 - 3 = -1 (negative)"
+    },
+    {
+      "i": 122,
+      "text": "Denominator: (2 + 1)(2 - 1) = 3 * 1 = 3 (positive)"
+    },
+    {
+      "i": 123,
+      "text": "Overall: (-1)/3 = negative."
+    },
+    {
+      "i": 124,
+      "text": "So expression is negative in (1, 3)."
+    },
+    {
+      "i": 125,
+      "text": "For (3, ∞), pick x = 4:"
+    },
+    {
+      "i": 126,
+      "text": "Numerator: 4 - 3 = 1 (positive)"
+    },
+    {
+      "i": 127,
+      "text": "Denominator: (4 + 1)(4 - 1) = 5 * 3 = 15 (positive)"
+    },
+    {
+      "i": 128,
+      "text": "Overall: 1/15 (positive)."
+    },
+    {
+      "i": 129,
+      "text": "So expression is positive in (3, ∞)."
+    },
+    {
+      "i": 130,
+      "text": "Now, the critical points:"
+    },
+    {
+      "i": 131,
+      "text": "At x = -1, x = 1: undefined (vertical asymptotes)."
+    },
+    {
+      "i": 132,
+      "text": "At x = 3: numerator is zero, so the expression is zero, which satisfies the inequality \\(\\ge 0\\)."
+    },
+    {
+      "i": 133,
+      "text": "So the intervals where the expression is ≥ 0 are:"
+    },
+    {
+      "i": 134,
+      "text": "- (-1, 1): positive\n- [3, ∞): including x=3 where it's zero"
+    },
+    {
+      "i": 135,
+      "text": "But wait, we need to check if these intervals are within the domain."
+    },
+    {
+      "i": 136,
+      "text": "The original domain excluded x = -1 and x = 1."
+    },
+    {
+      "i": 137,
+      "text": "So the solution intervals are (-1, 1) union [3, ∞)."
+    },
+    {
+      "i": 138,
+      "text": "However, wait a second!"
+    },
+    {
+      "i": 139,
+      "text": "This conclusion is based on the reduced inequality \\(\\frac{x - 3}{(x + 1)(x - 1)} \\ge 0\\)."
+    },
+    {
+      "i": 140,
+      "text": "But we need to check if this simplification is valid."
+    },
+    {
+      "i": 141,
+      "text": "Because earlier, the original inequality after combining was:"
+    },
+    {
+      "i": 142,
+      "text": "\\[\n\\frac{(x - 3)(4x^2 + 3x +1)}{4(x + 1)(x - 1)} \\ge 0\n\\]"
+    },
+    {
+      "i": 143,
+      "text": "But since 4x² + 3x +1 is always positive, and 4 is positive, the sign is determined by (x - 3)/[(x + 1)(x - 1)]."
+    },
+    {
+      "i": 144,
+      "text": "So our conclusion holds."
+    },
+    {
+      "i": 145,
+      "text": "However, we need to make sure that in the original inequality, all steps are valid."
+    },
+    {
+      "i": 146,
+      "text": "For instance, when we combined the terms, we didn't multiply both sides by anything that could change the inequality direction, right?"
+    },
+    {
+      "i": 147,
+      "text": "Because we only moved terms to one side and combined over a common denominator, which is a valid step."
+    },
+    {
+      "i": 148,
+      "text": "Therefore, the solution intervals are (-1, 1) and [3, ∞)."
+    },
+    {
+      "i": 149,
+      "text": "However, I need to check if these intervals actually satisfy the original inequality."
+    },
+    {
+      "i": 150,
+      "text": "Sometimes, when dealing with inequalities involving rational functions, especially after manipulating them, there can be mistakes in the sign analysis, so it's a good idea to test points in the original inequality."
+    },
+    {
+      "i": 151,
+      "text": "Let me test a point in (-1, 1), say x = 0:"
+    },
+    {
+      "i": 152,
+      "text": "Original inequality: \\(\\frac{0^2}{0 + 1} \\ge \\frac{2}{0 - 1} + \\frac{5}{4}\\)"
+    },
+    {
+      "i": 153,
+      "text": "Left side: 0 / 1 = 0"
+    },
+    {
+      "i": 154,
+      "text": "Right side: 2 / (-1) + 5/4 = -2 + 1.25 = -0.75"
+    },
+    {
+      "i": 155,
+      "text": "So 0 ≥ -0.75, which is true."
+    },
+    {
+      "i": 156,
+      "text": "Another test in (-1, 1): x = 0.5"
+    },
+    {
+      "i": 157,
+      "text": "Left side: (0.25) / (1.5) ≈ 0.1667"
+    },
+    {
+      "i": 158,
+      "text": "Right side: 2 / (-0.5) + 1.25 = -4 + 1.25 = -2.75"
+    },
+    {
+      "i": 159,
+      "text": "0.1667 ≥ -2.75: true."
+    },
+    {
+      "i": 160,
+      "text": "Now, test x = 2 (which is in (1,3) but according to our solution, this interval is not part of the solution)."
+    },
+    {
+      "i": 161,
+      "text": "Original inequality at x=2:"
+    },
+    {
+      "i": 162,
+      "text": "Left side: 4 / 3 ≈ 1.333"
+    },
+    {
+      "i": 163,
+      "text": "Right side: 2 / (1) + 5/4 = 2 + 1.25 = 3.25"
+    },
+    {
+      "i": 164,
+      "text": "So 1.333 ≥ 3.25?"
+    },
+    {
+      "i": 165,
+      "text": "No, false."
+    },
+    {
+      "i": 166,
+      "text": "So (1,3) is correctly excluded."
+    },
+    {
+      "i": 167,
+      "text": "Test x = 4 (in [3, ∞)):"
+    },
+    {
+      "i": 168,
+      "text": "Left side: 16 / 5 = 3.2"
+    },
+    {
+      "i": 169,
+      "text": "Right side: 2 / 3 + 5/4 ≈ 0.6667 + 1.25 = 1.9167"
+    },
+    {
+      "i": 170,
+      "text": "3.2 ≥ 1.9167: true."
+    },
+    {
+      "i": 171,
+      "text": "Test x = 3:"
+    },
+    {
+      "i": 172,
+      "text": "Left side: 9 / 4 = 2.25"
+    },
+    {
+      "i": 173,
+      "text": "Right side: 2 / 2 + 5/4 = 1 + 1.25 = 2.25"
+    },
+    {
+      "i": 174,
+      "text": "2.25 ≥ 2.25: equality holds, so x=3 is included."
+    },
+    {
+      "i": 175,
+      "text": "Now, check a point near the excluded boundaries."
+    },
+    {
+      "i": 176,
+      "text": "For x approaching -1 from the right (e.g., x = -0.5):"
+    },
+    {
+      "i": 177,
+      "text": "Left side: (0.25) / (0.5) = 0.5"
+    },
+    {
+      "i": 178,
+      "text": "Right side: 2 / (-1.5) + 1.25 ≈ -1.333 + 1.25 ≈ -0.083"
+    },
+    {
+      "i": 179,
+      "text": "0.5 ≥ -0.083: true."
+    },
+    {
+      "i": 180,
+      "text": "So near -1, it's still valid."
+    },
+    {
+      "i": 181,
+      "text": "However, as x approaches -1 from the right, left side approaches infinity?"
+    },
+    {
+      "i": 182,
+      "text": "Wait, no."
+    },
+    {
+      "i": 183,
+      "text": "Wait, x approaches -1 from the right (x > -1), denominator x +1 approaches 0 from positive side."
+    },
+    {
+      "i": 184,
+      "text": "Numerator x² approaches 1."
+    },
+    {
+      "i": 185,
+      "text": "So left side approaches 1 / 0+ = +∞."
+    },
+    {
+      "i": 186,
+      "text": "So near x = -1, left side is very large, which would definitely be greater than the right side."
+    },
+    {
+      "i": 187,
+      "text": "So the interval (-1,1) is correct."
+    },
+    {
+      "i": 188,
+      "text": "But wait, when x approaches 1 from the left, what happens?"
+    },
+    {
+      "i": 189,
+      "text": "Take x approaching 1 from the left (x = 0.9):"
+    },
+    {
+      "i": 190,
+      "text": "Left side: (0.81) / (1.9) ≈ 0.426"
+    },
+    {
+      "i": 191,
+      "text": "Right side: 2 / (-0.1) + 1.25 = -20 + 1.25 = -18.75"
+    },
+    {
+      "i": 192,
+      "text": "So 0.426 ≥ -18.75: true."
+    },
+    {
+      "i": 193,
+      "text": "So near x=1 from left, it's true."
+    },
+    {
+      "i": 194,
+      "text": "However, according to our solution, x=1 is excluded, which is correct since original inequality is undefined there."
+    },
+    {
+      "i": 195,
+      "text": "But let me check a point just above x=1, say x=1.5 (which is in (1,3)):"
+    },
+    {
+      "i": 196,
+      "text": "Left side: (2.25)/2.5 = 0.9"
+    },
+    {
+      "i": 197,
+      "text": "Right side: 2/(0.5) + 1.25 = 4 + 1.25 = 5.25"
+    },
+    {
+      "i": 198,
+      "text": "0.9 ≥ 5.25?"
+    },
+    {
+      "i": 199,
+      "text": "No, false."
+    },
+    {
+      "i": 200,
+      "text": "So (1,3) is correctly excluded."
+    },
+    {
+      "i": 201,
+      "text": "Another test at x= -2 (excluded interval (-∞, -1)):"
+    },
+    {
+      "i": 202,
+      "text": "Left side: 4 / (-1) = -4"
+    },
+    {
+      "i": 203,
+      "text": "Right side: 2 / (-3) + 1.25 ≈ -0.666 + 1.25 ≈ 0.583"
+    },
+    {
+      "i": 204,
+      "text": "So -4 ≥ 0.583?"
+    },
+    {
+      "i": 205,
+      "text": "No, false."
+    },
+    {
+      "i": 206,
+      "text": "So (-∞, -1) is correctly excluded."
+    },
+    {
+      "i": 207,
+      "text": "Therefore, the solution seems to be (-1, 1) union [3, ∞)."
+    },
+    {
+      "i": 208,
+      "text": "However, let me check the original inequality again."
+    },
+    {
+      "i": 209,
+      "text": "When combining the terms, we had to subtract the right side, which is valid."
+    },
+    {
+      "i": 210,
+      "text": "But another approach is to multiply both sides by denominators, but that can be risky because the sign of the denominator affects the inequality direction."
+    },
+    {
+      "i": 211,
+      "text": "Alternatively, perhaps I should consider cross-multiplying, but with care about the sign of the denominators."
+    },
+    {
+      "i": 212,
+      "text": "Wait, but since we moved all terms to one side and combined them, leading to the inequality \\(\\frac{(x - 3)}{(x + 1)(x - 1)} \\ge 0\\), which we analyzed."
+    },
+    {
+      "i": 213,
+      "text": "But let's just recap: after simplification, the critical points are at x=-1,1,3, and the sign chart shows the expression is positive in (-1,1) and (3, ∞), and zero at x=3."
+    },
+    {
+      "i": 214,
+      "text": "Since the original inequality includes equality (≥0), x=3 is included."
+    },
+    {
+      "i": 215,
+      "text": "The intervals (-1,1) and [3, ∞) are solutions, excluding x=-1 and x=1."
+    },
+    {
+      "i": 216,
+      "text": "But hold on, let me confirm once again."
+    },
+    {
+      "i": 217,
+      "text": "The original inequality was \\(\\frac{x^2}{x+1} \\ge \\frac{2}{x-1} + \\frac{5}{4}\\)."
+    },
+    {
+      "i": 218,
+      "text": "When combining terms, we have to ensure that we didn't make any algebraic mistakes."
+    },
+    {
+      "i": 219,
+      "text": "Let me recheck the numerator expansion."
+    },
+    {
+      "i": 220,
+      "text": "Original numerator after combining over common denominator:"
+    },
+    {
+      "i": 221,
+      "text": "4x^3 -4x^2 -8x -8 -5x^2 +5"
+    },
+    {
+      "i": 222,
+      "text": "Wait, let me recheck:"
+    },
+    {
+      "i": 223,
+      "text": "First term: 4x^3 -4x^2"
+    },
+    {
+      "i": 224,
+      "text": "Second term: -8x -8"
+    },
+    {
+      "i": 225,
+      "text": "Third term: -5x^2 +5"
+    },
+    {
+      "i": 226,
+      "text": "Combine:"
+    },
+    {
+      "i": 227,
+      "text": "4x^3 -4x^2 -5x^2 = 4x^3 -9x^2"
+    },
+    {
+      "i": 228,
+      "text": "-8x"
+    },
+    {
+      "i": 229,
+      "text": "-8 +5 = -3"
+    },
+    {
+      "i": 230,
+      "text": "So numerator is 4x^3 -9x^2 -8x -3."
+    },
+    {
+      "i": 231,
+      "text": "Then factored as (x -3)(4x^2 +3x +1)."
+    },
+    {
+      "i": 232,
+      "text": "Correct."
+    },
+    {
+      "i": 233,
+      "text": "So that part is okay."
+    },
+    {
+      "i": 234,
+      "text": "Then, the rest follows."
+    },
+    {
+      "i": 235,
+      "text": "Therefore, conclusion holds."
+    },
+    {
+      "i": 236,
+      "text": "Therefore, the solution set is \\( (-1, 1) \\cup [3, \\infty) \\)."
+    },
+    {
+      "i": 237,
+      "text": "But wait, hold on!"
+    },
+    {
+      "i": 238,
+      "text": "Let me check x approaching -1 from the right."
+    },
+    {
+      "i": 239,
+      "text": "For example, x = -0.5:"
+    },
+    {
+      "i": 240,
+      "text": "Left side: (0.25)/(0.5) = 0.5"
+    },
+    {
+      "i": 241,
+      "text": "Right side: 2/(-1.5) + 1.25 ≈ -1.333 + 1.25 ≈ -0.083"
+    },
+    {
+      "i": 242,
+      "text": "So 0.5 ≥ -0.083: true."
+    },
+    {
+      "i": 243,
+      "text": "Another test at x approaching 1 from the left, say x=0.9:"
+    },
+    {
+      "i": 244,
+      "text": "Left side: 0.81/1.9 ≈ 0.426"
+    },
+    {
+      "i": 245,
+      "text": "Right side: 2/(-0.1) + 1.25 = -20 + 1.25 = -18.75"
+    },
+    {
+      "i": 246,
+      "text": "0.426 ≥ -18.75: true."
+    },
+    {
+      "i": 247,
+      "text": "But when x approaches -1 from the right, the left side becomes very large positive, so the inequality holds."
+    },
+    {
+      "i": 248,
+      "text": "Similarly, as x approaches 1 from the left, the left side approaches 1/(2), and the right side approaches negative infinity, so inequality holds."
+    },
+    {
+      "i": 249,
+      "text": "But wait, there's something odd here."
+    },
+    {
+      "i": 250,
+      "text": "The interval (-1,1) is part of the solution, but in the original inequality, when x is between -1 and 1, the denominator x -1 becomes negative."
+    },
+    {
+      "i": 251,
+      "text": "So when we have terms like \\(\\frac{2}{x -1}\\), that term is negative."
+    },
+    {
+      "i": 252,
+      "text": "Similarly, the left side \\(\\frac{x^2}{x +1}\\) is positive because x +1 is positive in (-1,1), so left side is positive."
+    },
+    {
+      "i": 253,
+      "text": "So positive left side is greater than a negative right side, which is always true."
+    },
+    {
+      "i": 254,
+      "text": "Therefore, in the interval (-1,1), the original inequality reduces to positive ≥ negative + positive, which is always true."
+    },
+    {
+      "i": 255,
+      "text": "So the entire interval (-1,1) should be part of the solution."
+    },
+    {
+      "i": 256,
+      "text": "Similarly, for x >3, both sides are positive, so the inequality may or may not hold, but according to our analysis, it does."
+    },
+    {
+      "i": 257,
+      "text": "Wait, but according to the original inequality, the left side is positive in (-1,1), and the right side is:"
+    },
+    {
+      "i": 258,
+      "text": "\\(\\frac{2}{x -1} + \\frac{5}{4}\\)."
+    },
+    {
+      "i": 259,
+      "text": "For x in (-1,1), x -1 is negative, so \\(\\frac{2}{x -1}\\) is negative."
+    },
+    {
+      "i": 260,
+      "text": "Then adding 5/4 (positive) to a negative."
+    },
+    {
+      "i": 261,
+      "text": "So depending on how negative it is, the right side could be negative or positive."
+    },
+    {
+      "i": 262,
+      "text": "However, for x in (-1,1):"
+    },
+    {
+      "i": 263,
+      "text": "Let me compute the right side:"
+    },
+    {
+      "i": 264,
+      "text": "At x=0: 2/(-1) + 5/4 = -2 + 1.25 = -0.75 (negative)"
+    },
+    {
+      "i": 265,
+      "text": "At x approaching 1 from the left: 2/(x -1) approaches -infty, so right side approaches -infty + 1.25 = -infty"
+    },
+    {
+      "i": 266,
+      "text": "At x approaching -1 from the right: 2/(x -1) approaches 2/(-2) = -1, so right side approaches -1 + 1.25 = 0.25"
+    },
+    {
+      "i": 267,
+      "text": "So in (-1,1), the right side is from 0.25 down to -infty."
+    },
+    {
+      "i": 268,
+      "text": "So the right side is less than or equal to 0.25."
+    },
+    {
+      "i": 269,
+      "text": "The left side, which is \\(\\frac{x^2}{x +1}\\), in (-1,1):"
+    },
+    {
+      "i": 270,
+      "text": "At x approaching -1 from the right, denominator approaches 0+, numerator approaches 1, so left side approaches +infty."
+    },
+    {
+      "i": 271,
+      "text": "At x=0: left side is 0."
+    },
+    {
+      "i": 272,
+      "text": "Wait, hold on, this seems conflicting."
+    },
+    {
+      "i": 273,
+      "text": "When x approaches -1 from the right, left side approaches infinity, which is greater than any finite right side."
+    },
+    {
+      "i": 274,
+      "text": "But when x approaches 1 from the left, left side approaches \\(\\frac{1}{2}\\), and right side approaches -infty, so again left side is greater."
+    },
+    {
+      "i": 275,
+      "text": "However, at x=0, left side is 0, and right side is -0.75, so 0 ≥ -0.75 is true."
+    },
+    {
+      "i": 276,
+      "text": "But wait, if x is in (-1,1), the left side is \\(\\frac{x^2}{x +1}\\)."
+    },
+    {
+      "i": 277,
+      "text": "Since x +1 is positive (because x > -1), and x^2 is always non-negative, the left side is non-negative."
+    },
+    {
+      "i": 278,
+      "text": "The right side is \\(\\frac{2}{x -1} + \\frac{5}{4}\\)."
+    },
+    {
+      "i": 279,
+      "text": "Since x -1 is negative, \\(\\frac{2}{x -1}\\) is negative, so the right side is negative plus a positive."
+    },
+    {
+      "i": 280,
+      "text": "The question is whether it can ever be positive."
+    },
+    {
+      "i": 281,
+      "text": "For example, if x is near -1, say x = -0.5:"
+    },
+    {
+      "i": 282,
+      "text": "Right side: 2/(-1.5) + 1.25 ≈ -1.333 + 1.25 ≈ -0.083 (still negative)."
+    },
+    {
+      "i": 283,
+      "text": "So even near x=-1, the right side is negative."
+    },
+    {
+      "i": 284,
+      "text": "Therefore, the right side is always negative in (-1,1), and the left side is non-negative."
+    },
+    {
+      "i": 285,
+      "text": "So non-negative is always ≥ negative."
+    },
+    {
+      "i": 286,
+      "text": "Therefore, the entire interval (-1,1) satisfies the original inequality."
+    },
+    {
+      "i": 287,
+      "text": "So our earlier conclusion is correct."
+    },
+    {
+      "i": 288,
+      "text": "Therefore, the solution set is indeed (-1,1) union [3, ∞)."
+    },
+    {
+      "i": 289,
+      "text": "But let me check another point in (-1,1), like x=0.5:"
+    },
+    {
+      "i": 290,
+      "text": "Left side: (0.25)/1.5 ≈ 0.1667"
+    },
+    {
+      "i": 291,
+      "text": "Right side: 2/(-0.5) + 1.25 = -4 + 1.25 = -2.75"
+    },
+    {
+      "i": 292,
+      "text": "0.1667 ≥ -2.75: true."
+    },
+    {
+      "i": 293,
+      "text": "At x approaching 1 from the left:"
+    },
+    {
+      "i": 294,
+      "text": "Left side approaches \\(\\frac{1}{2}\\), right side approaches \\(-\\infty\\)."
+    },
+    {
+      "i": 295,
+      "text": "So 1/2 ≥ -infty: true."
+    },
+    {
+      "i": 296,
+      "text": "At x approaching -1 from the right:"
+    },
+    {
+      "i": 297,
+      "text": "Left side approaches +infty, right side approaches 0.25."
+    },
+    {
+      "i": 298,
+      "text": "So +infty ≥ 0.25: true."
+    },
+    {
+      "i": 299,
+      "text": "Therefore, (-1,1) is entirely part of the solution."
+    },
+    {
+      "i": 300,
+      "text": "Then, for x ≥3, we saw that the expression is positive."
+    },
+    {
+      "i": 301,
+      "text": "Therefore, the solution is correct."
+    },
+    {
+      "i": 302,
+      "text": "However, to make sure there are no mistakes in the algebra, let me re-examine the steps."
+    },
+    {
+      "i": 303,
+      "text": "Original inequality:"
+    },
+    {
+      "i": 304,
+      "text": "\\(\\frac{x^2}{x+1} \\ge \\frac{2}{x-1} + \\frac{5}{4}\\)"
+    },
+    {
+      "i": 305,
+      "text": "Subtracting the right side:"
+    },
+    {
+      "i": 306,
+      "text": "\\(\\frac{x^2}{x+1} - \\frac{2}{x-1} - \\frac{5}{4} \\ge 0\\)"
+    },
+    {
+      "i": 307,
+      "text": "Combined over common denominator 4(x+1)(x-1):"
+    },
+    {
+      "i": 308,
+      "text": "Numerator: 4x^2(x -1) -8(x +1) -5(x^2 -1)"
+    },
+    {
+      "i": 309,
+      "text": "Expanding:"
+    },
+    {
+      "i": 310,
+      "text": "4x^3 -4x^2 -8x -8 -5x^2 +5"
+    },
+    {
+      "i": 311,
+      "text": "Combine like terms:"
+    },
+    {
+      "i": 312,
+      "text": "4x^3 -9x^2 -8x -3"
+    },
+    {
+      "i": 313,
+      "text": "Factoring: (x -3)(4x^2 +3x +1)"
+    },
+    {
+      "i": 314,
+      "text": "Then, since 4x² +3x +1 is positive, inequality reduces to (x -3)/[(x +1)(x -1)] ≥0."
+    },
+    {
+      "i": 315,
+      "text": "Sign analysis leads to intervals (-1,1) and [3, ∞)."
+    },
+    {
+      "i": 316,
+      "text": "All tests confirm this."
+    },
+    {
+      "i": 317,
+      "text": "Therefore, the solution is all real numbers x such that -1 < x < 1 or x ≥3."
+    },
+    {
+      "i": 318,
+      "text": "But since the original inequality is undefined at x=-1 and x=1, these points are excluded."
+    },
+    {
+      "i": 319,
+      "text": "At x=3, the inequality becomes equality, so x=3 is included."
+    },
+    {
+      "i": 320,
+      "text": "Thus, the final answer is \\(\\boxed{(-1, 1) \\cup [3, \\infty)}\\)."
+    },
+    {
+      "i": 321,
+      "text": "**Final Answer**\n\\boxed{(-1, 1) \\cup [3, \\infty)}"
+    }
+  ],
+  "solution": "To solve the inequality \\(\\frac{x^2}{x+1} \\ge \\frac{2}{x-1} + \\frac{5}{4}\\), we first consider the domain restrictions: \\(x \\neq -1\\) and \\(x \\neq 1\\). We then combine the terms into a single rational expression:\n\n\\[\n\\frac{x^2}{x+1} - \\frac{2}{x-1} - \\frac{5}{4} \\ge 0\n\\]\n\nFinding a common denominator \\(4(x+1)(x-1)\\), we rewrite each term:\n\n\\[\n\\frac{4x^2(x-1) - 8(x+1) - 5(x^2 - 1)}{4(x+1)(x-1)} \\ge 0\n\\]\n\nSimplifying the numerator:\n\n\\[\n4x^3 - 9x^2 - 8x - 3\n\\]\n\nFactoring the numerator, we find it factors to \\((x - 3)(4x^2 + 3x + 1)\\). Since \\(4x^2 + 3x + 1\\) is always positive, the inequality reduces to:\n\n\\[\n\\frac{(x - 3)}{(x + 1)(x - 1)} \\ge 0\n\\]\n\nThe critical points are \\(x = -1\\), \\(x = 1\\), and \\(x = 3\\). We analyze the sign of the expression in the intervals determined by these points:\n\n- \\((-∞, -1)\\): Negative\n- \\((-1, 1)\\): Positive\n- \\((1, 3)\\): Negative\n- \\((3, ∞)\\): Positive\n\nSince the inequality is non-negative (\\(\\ge 0\\)), the solution includes intervals where the expression is positive or zero. Testing points in these intervals confirms the solution. The expression is zero at \\(x = 3\\) and undefined at \\(x = -1\\) and \\(x = 1\\).\n\nThus, the solution is:\n\n\\[\n\\boxed{(-1, 1) \\cup [3, \\infty)}\n\\]"
+}

@@ -145,8 +145,9 @@ Bespoke-Stratos-17k questions outside the SFT set (`../train/data_labeled_2`), r
 the harbor dataset `bespoke-stratos-rest`, with a seeded 90/10 split. Questions without a
 checkable answer (the coding questions and prose or proof answers), which the reward
 could score on the label term alone, are moved to `../no_answer/` in the same split, so
-`data/rest_grpo/` keeps 4,786 train / 526 validation questions with one checkable answer
-(solutions that box several distinct values are moved too).
+`data/rest_grpo/` keeps 4,776 train / 526 validation questions with one checkable answer
+(solutions that box several distinct values are moved too); 10 more training questions
+are held out in `../manual_inspection/` and never trained on.
 Usage is in the [root README](../README.md#training-on-rest_grpo).
 
 ## 6. Cost
@@ -168,7 +169,7 @@ unless `CKPT_SAVE_OPTIMIZER=true`. A resumed run then restarts Adam's moments.
 Done locally, without a GPU:
 
 - **Reward and data.**
-  - `../run.sh test`: 43 unit tests (reward incl. the 0.2 / 0.8 weights, the invalid-label
+  - `../run.sh test`: 44 unit tests (reward incl. the 0.2 / 0.8 weights, the invalid-label
     rule, cut-off answers left out of the logged reward and the math_verify answer check;
     the workflow's regenerate loop, prompt handling and the overlong termination reason
     the trainer filters on; the grpo_try and rest_grpo task builders and their format

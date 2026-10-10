@@ -1,0 +1,2349 @@
+{
+  "id": "sample_010366",
+  "model": "DeepSeek-R1",
+  "question": "Return your final response within \\boxed{}. In three-dimensional space, find the number of lattice points that have a distance of 3 from the origin.\n\nNote: A point is a lattice point if all its coordinates are integers.",
+  "thought_trace": "Okay, so the problem is asking for the number of lattice points in three-dimensional space that are exactly 3 units away from the origin. A lattice point is one where all coordinates are integers. Alright, let me start by recalling what this means.\n\nIn three dimensions, a lattice point has coordinates (x, y, z) where x, y, and z are all integers. The distance from the origin to such a point is given by the Euclidean distance formula: √(x² + y² + z²). The problem states that this distance should be 3. So, mathematically, we need to find all integer solutions (x, y, z) to the equation:\n\n√(x² + y² + z²) = 3\n\nIf I square both sides to eliminate the square root, the equation becomes:\n\nx² + y² + z² = 9\n\nSo now, the problem reduces to finding all integer triples (x, y, z) such that the sum of their squares is 9. Each such triple corresponds to a lattice point at distance 3 from the origin.\n\nLet me think about how to approach this systematically. Since all coordinates are integers, their squares are non-negative integers. The maximum possible value for any coordinate squared is 9, because if, say, x² = 9, then y² and z² must both be zero. So each coordinate can be between -3 and 3, inclusive. That gives me a finite set of possibilities to check, but I should find a way to count them without checking each one individually.\n\nFirst, let's consider the possible values that x², y², and z² can take. Since they are squares, each term must be a non-negative integer. So, we need to find all ordered triples (a, b, c) where a, b, c are non-negative integers, a + b + c = 9, and each of a, b, c is a perfect square. Wait, no—actually, x², y², z² are non-negative integers whose sum is 9, but they don't necessarily have to be perfect squares themselves. Wait, no, that's a confusion here. Wait, x, y, z are integers, so x², y², z² are squares of integers, hence non-negative integers. So the problem reduces to finding all ordered triples (x², y², z²) where each is a non-negative integer square and their sum is 9. Then, for each such triple, we can compute the number of corresponding lattice points by considering the signs of x, y, z.\n\nTherefore, the approach should be:\n\n1. Enumerate all possible combinations of non-negative integers a, b, c such that a + b + c = 9, where each of a, b, c is a perfect square (i.e., a = x², b = y², c = z² for integers x, y, z).\n\n2. For each combination (a, b, c), determine how many ordered triples (x, y, z) correspond to it, considering that each coordinate can be positive or negative (unless the coordinate is zero, which has only one possibility).\n\nSo, first step: find all possible perfect squares a, b, c such that a + b + c = 9.\n\nThe perfect squares less than or equal to 9 are 0, 1, 4, 9.\n\nTherefore, each of a, b, c can be 0, 1, 4, or 9. Now, we need to find all ordered triples (a, b, c) of these numbers that add up to 9.\n\nTo do this systematically, let's consider the possible values for a, then for each a, the possible values for b, then c is determined as 9 - a - b. But we need to ensure that c is also a perfect square (0, 1, 4, 9) and non-negative.\n\nAlternatively, we can list all possible combinations. Let's start with the largest possible square, which is 9.\n\nCase 1: One of a, b, c is 9.\n\nSuppose a = 9. Then b + c = 0. The only possibility is b = 0, c = 0. Similarly, if b = 9, then a + c = 0, so a = 0, c = 0. Similarly for c = 9. So there are 3 ordered triples here: (9,0,0), (0,9,0), (0,0,9). Each corresponds to permutations of 9, 0, 0.\n\nCase 2: One of a, b, c is 4. Then the remaining sum is 9 - 4 = 5. Now, we need to split 5 into two perfect squares (each of which can be 0,1,4). Let's check possible combinations.\n\nPossible squares for the next term: 4, 1, 0.\n\nIf we take 4: 4 + 4 = 8 > 5, so too big. If we take 4 + 1 = 5. That works. So 4, 1, 0.\n\nWait, but 5 can be split as 4 + 1, or 1 + 4, or 5 + 0 (but 5 isn't a square). Wait, since the remaining sum after 4 is 5, we need two squares that add up to 5. The squares available are 0, 1, 4.\n\nSo possible combinations:\n\n4 + 1: 4 + 1 = 5\n\n1 + 4: same as above, but since order matters in the ordered triples, these would be different.\n\nWait, actually, since in the ordered triples (a, b, c), once we fix one coordinate as 4, the remaining two coordinates have to sum to 5, and each is a square. Let's see:\n\nSuppose a = 4. Then b + c = 5. Now, possible pairs (b, c) where both b and c are squares (0,1,4):\n\nCheck possible b:\n\nIf b = 4, then c = 1. So (4,4,1)\n\nIf b = 1, then c = 4. So (4,1,4)\n\nIf b = 0, then c = 5, but 5 isn't a square. So only two possibilities here: (4,4,1) and (4,1,4). But wait, actually, since a is fixed at 4, and b and c can be arranged in different orders. However, in the original problem, the coordinates are ordered (x, y, z). So the triples (4,4,1), (4,1,4), (1,4,4) are different.\n\nWait, but hold on: in this case, when a = 4, then we need to split 5 into b + c. The possible pairs are (4,1) and (1,4). So that would lead to (4,4,1) and (4,1,4). Then, if we consider permutations where the 4 is in different positions, like (4,4,1), (4,1,4), (1,4,4), etc., but each of these would correspond to different cases when considering all permutations.\n\nWait, perhaps a better approach is to first list all possible unordered combinations and then compute the number of ordered permutations for each.\n\nAlternatively, let's approach it step by step.\n\nFirst, when we have one coordinate squared equal to 4, and the sum of the other two is 5.\n\nSo for example, if a=4, then we need b and c such that b² + c² =5. Wait, no, hold on. Wait, in the previous step, after squaring, we had that x², y², z² are a, b, c. So in the case where a=4, we have x²=4, so x=±2. Then, the sum of y² and z² is 5. But y² and z² must be integers, so possible pairs (y², z²) that sum to 5. Since 5 can be written as 4 + 1 or 1 + 4. So (4,1) or (1,4). So for each such pair, we can have y²=4 and z²=1, or y²=1 and z²=4.\n\nTherefore, for each such a=4, we have two different ordered pairs (b, c): (4,1) and (1,4). Each of these would correspond to different coordinates. Then, considering permutations across the three coordinates.\n\nBut maybe it's better to handle all possible combinations.\n\nWait, let's try to structure this.\n\nFirst, let's consider all possible triplets (a, b, c) where a, b, c ∈ {0, 1, 4, 9} and a + b + c = 9.\n\nStart with the case where one of the squares is 9. As before, this leads to (9,0,0) and permutations, which are 3 ordered triples.\n\nCase where one of the squares is 4. So we have to consider all ordered triples where one element is 4, and the other two sum to 5. But the other two elements must be in {0,1,4} and sum to 5.\n\nPossible pairs for the remaining two numbers:\n\n- 4 and 1 (since 4 +1 =5)\n\n- 1 and 4 (same as above)\n\n- 5 and 0 (but 5 isn't a square)\n\n- 0 and 5 (same)\n\nSo the only possible pairs are (4,1) and (1,4). Thus, for each coordinate where the 4 is placed, the remaining two coordinates can be (4,1) or (1,4). However, since the coordinates are ordered, each permutation counts.\n\nWait, actually, if we fix one coordinate as 4, say the first one, then the remaining two coordinates need to sum to 5, which can be 4 and 1. So the ordered triples would be (4,4,1), (4,1,4). Then, for each position of the 4 (first, second, third), we have similar possibilities.\n\nWait, no. Wait, if we fix a coordinate as 4, say a=4, then the remaining coordinates can be (4,1) or (1,4). So each coordinate position for the 4 would lead to two ordered triples. Therefore, for each of the three positions (a, b, c), we have two ordered triples each. Therefore, 3 positions * 2 = 6 ordered triples where one coordinate is 4, another is 4, and the third is 1, arranged in different orders.\n\nWait, but hold on. Let me clarify. If we have a 4 in one coordinate, then the other two coordinates need to add up to 5. The possible ordered pairs for the other two coordinates are (4,1) and (1,4). So if the 4 is in the first coordinate, the ordered triples are (4,4,1) and (4,1,4). Similarly, if the 4 is in the second coordinate, the ordered triples are (4,4,1) and (1,4,4). Wait, no. Wait, if the 4 is in the second coordinate, then the other two coordinates (first and third) need to add up to 5. So the ordered triples would be (4,4,1) and (1,4,4). Similarly, if the 4 is in the third coordinate, the ordered triples would be (4,1,4) and (1,4,4). But hold on, this seems overlapping.\n\nWait, perhaps the correct count is that for each position of the 4 (three positions), and for each, two ordered pairs for the remaining coordinates. However, some of these might overlap.\n\nWait, actually, let's list them all:\n\n1. 4 in the first coordinate:\n\n   - (4,4,1)\n\n   - (4,1,4)\n\n2. 4 in the second coordinate:\n\n   - (4,4,1)\n\n   - (1,4,4)\n\n3. 4 in the third coordinate:\n\n   - (4,1,4)\n\n   - (1,4,4)\n\nBut here, (4,4,1) appears in both positions 1 and 2. Similarly, (4,1,4) appears in positions 1 and 3, and (1,4,4) appears in positions 2 and 3. Wait, so actually, each of these ordered triples is counted twice. Therefore, the total unique ordered triples are three: (4,4,1), (4,1,4), (1,4,4). Each of these can be achieved in two different ways, but since we are considering ordered triples, they are distinct based on the position of the 1.\n\nWait, perhaps I made a mistake here. Let me clarify.\n\nIf the main 4 is in the first coordinate, then the remaining two coordinates can be (4,1) or (1,4). So (4,4,1) and (4,1,4). Similarly, if the main 4 is in the second coordinate, the remaining two coordinates can be (4,1) or (1,4), leading to (4,4,1) and (1,4,4). If the main 4 is in the third coordinate, the remaining two coordinates can be (4,1) or (1,4), leading to (4,1,4) and (1,4,4). So the unique ordered triples here are (4,4,1), (4,1,4), and (1,4,4). Each of these can be formed in two different ways depending on which coordinate the main 4 is in, but since we're considering all permutations, each of these ordered triples is unique. Therefore, there are 3 ordered triples where one coordinate is 4, another is 4, and the third is 1. Wait, no, actually, (4,4,1) is a different ordered triple than (4,1,4). Each has the 4s in different positions. So in total, there are 3 ordered triples here, each with two 4s and one 1. Wait, no, each has one 4, one 4, and one 1, arranged differently. So yes, three ordered triples.\n\nBut wait, each of these ordered triples (4,4,1), (4,1,4), (1,4,4) corresponds to two different original placements (depending on which coordinate was fixed first). But since they are considered as ordered triples, all permutations are separate. Wait, but in reality, when we fix a coordinate as 4 and then arrange the remaining two, we get different ordered triples. For example:\n\n- Fix first coordinate as 4: possible ordered triples (4,4,1) and (4,1,4)\n\n- Fix second coordinate as 4: possible ordered triples (4,4,1) and (1,4,4)\n\n- Fix third coordinate as 4: possible ordered triples (4,1,4) and (1,4,4)\n\nThus, in total, we have six ordered triples? But that can't be, since (4,4,1) is repeated when fixing first and second coordinates. Wait, no. Wait, if I fix first coordinate as 4 and arrange the remaining two as (4,1) or (1,4), then I get (4,4,1) and (4,1,4). If I fix the second coordinate as 4, then arrange the remaining two as (4,1) or (1,4), then I get (4,4,1) and (1,4,4). Similarly, fixing the third coordinate gives (4,1,4) and (1,4,4). But in reality, (4,4,1) is the same as (4,4,1) regardless of which coordinate was fixed first. Wait, no, the ordered triples are unique. So (4,4,1) is different from (4,1,4) and (1,4,4). So each of these is a distinct ordered triple. Therefore, the total number of ordered triples where one coordinate is 4, one is 4, and one is 1 is 3: (4,4,1), (4,1,4), (1,4,4). Each of these has two 4s and one 1.\n\nBut wait, when you fix different coordinates, you get different ordered triples. So the total number of ordered triples here is actually 3 * 2 = 6? No, because when you fix the first coordinate as 4, you get two ordered triples: (4,4,1) and (4,1,4). Fixing the second coordinate as 4 gives (4,4,1) and (1,4,4). Fixing the third coordinate as 4 gives (4,1,4) and (1,4,4). So in total, we have (4,4,1), (4,1,4), (1,4,4), each appearing twice. Therefore, the unique ordered triples are three: (4,4,1), (4,1,4), and (1,4,4). Each of these can be obtained in two different ways (depending on which coordinate was fixed first), but since they are the same ordered triples, we count them once each. Hence, three ordered triples where two coordinates are 4 and one is 1.\n\nWait, but no. The problem is that in the process above, when you fix different coordinates, you might generate the same ordered triple. For example, if you fix the first coordinate as 4 and arrange (4,1), you get (4,4,1). If you fix the second coordinate as 4 and arrange (4,1) in the first and third, you also get (4,4,1). So this ordered triple is generated by two different fixations, but it's still one unique ordered triple. Therefore, the total number of ordered triples in this case is three: (4,4,1), (4,1,4), and (1,4,4). Each has two 4s and one 1.\n\nBut wait, 4 + 4 + 1 = 9, yes. So that's correct.\n\nThen, moving on, next case where one coordinate is 4 and the other two coordinates sum to 5. Wait, but we just considered that. Are there any other combinations where one coordinate is 4?\n\nWait, suppose instead of two coordinates being 4 and 1, maybe there are other possibilities. For example, if a=4, then b + c=5. The possible pairs (b,c) are (4,1) and (1,4). We already considered that. There's no other way to express 5 as the sum of two squares from {0,1,4}. For example, 5 can't be expressed as 1 + 1 + 3, but 3 isn't a square. So no, only 4 + 1. So in this case, when one coordinate is 4, the other two must be 4 and 1 in some order.\n\nWait, but 4 + 1 =5. So each time we have a 4, the other two coordinates must add up to 5, which can only be done with 4 and 1. Therefore, the only ordered triples here are the three permutations of (4,4,1).\n\nWait, but wait, hold on. Let's consider another scenario where one coordinate is 4, and the other two coordinates are 1 and 4. Wait, that's the same as above. Alternatively, could there be another combination where, for example, a=4, and the other two coordinates are both 1s? But 1 +1=2, which is not 5. So no.\n\nAlternatively, a=4, then b=0, c=5, but 5 is not a square. So no. Therefore, the only possible combinations when one coordinate is 4 are the three permutations of (4,4,1).\n\nWait, but 4 +4 +1=9. So each of these ordered triples sums to 9. So these are valid.\n\nSo, moving on. So far, we have:\n\n- 3 ordered triples with one 9 and two 0s.\n\n- 3 ordered triples with two 4s and one 1.\n\nNow, are there any other ordered triples where one coordinate is 4? Let's check.\n\nSuppose we have one coordinate as 4, and the other two coordinates as 0 and 5. But 5 isn't a square, so that's invalid. So no.\n\nAlternatively, one coordinate as 4, and the other two as 1 and 4. Wait, that's the same as above.\n\nAlternatively, one coordinate as 4, and the others as 2²=4, but 2²=4, but 4 +4 +4=12≠9. So that's too big.\n\nSo no, only the three ordered triples with two 4s and one 1.\n\nNow, next case: no coordinate is 9 or 4. Then all coordinates must be 0, 1. Wait, but 0 +0 +0=0, which is less than 9. 1 +1 +1=3, still less. So this is impossible. Therefore, we must have at least one coordinate being 4 or 9.\n\nWait, but wait, let's check. Suppose all coordinates are 1s and 0s. The maximum sum would be 3 (three 1s). Which is less than 9. So that's impossible.\n\nAlternatively, if we have coordinates with 3²=9, but 3 is not a perfect square? Wait, 3 isn't a perfect square. Wait, 3 is not a square of an integer. The squares are 0,1,4,9,16, etc. So the only possible squares up to 9 are 0,1,4,9. Therefore, the only possible components are those.\n\nTherefore, the only remaining case is when all coordinates are 1s and 0s and 4s, but without any 9 or more than two 4s. Wait, but we already considered cases with 9 and cases with two 4s and one 1.\n\nWait, perhaps another case: one coordinate is 4, and the other two coordinates sum to 5, but using different squares.\n\nWait, but as established earlier, 5 can only be written as 4 +1. So that case is already covered.\n\nWait, perhaps the case where one coordinate is 1, and the other two sum to 8. But 8 can be expressed as 4 +4. So that would be (1,4,4). Wait, that's the same as the previous case. So (1,4,4) is already counted.\n\nAlternatively, what if we have three 1s? 1 +1 +1=3≠9. So that's too small. So not possible.\n\nAlternatively, combinations of 1s and 4s. For example, two 4s and one 1: which we've already considered.\n\nAlternatively, one 4 and five 1s. Wait, but five 1s would require five coordinates, but we only have three coordinates. So that's impossible.\n\nAlternatively, two 1s and one 7. But 7 isn't a square. So no.\n\nAlternatively, one 1 and two 4s. Wait, that's the same as before. 1 +4 +4=9.\n\nTherefore, the only other case is when all three coordinates are non-zero and none are 9. Let's see if there are solutions where all three squares are 1 or 4. For example, 1 +1 +7=9, but 7 isn't a square. 1 +4 +4=9, which is already considered. 4 +4 +1=9, same.\n\nAlternatively, three 3s: but 3 isn't a square. 3²=9, but that would be one 9 and two 0s, already considered.\n\nAlternatively, two 2s: 2²=4, so two 4s and one 1, which is the same as before.\n\nTherefore, seems like the only possible ordered triples are the ones with one 9 and two 0s, and the ones with two 4s and one 1. But wait, let's check another case: three 3s. But 3 isn't an integer square. 3²=9, which is already covered.\n\nWait, hold on. What about a combination of one 1, one 2²=4, and one 2²=4. That's again two 4s and one 1, which is the same as before.\n\nAlternatively, is there a combination where we have one 1, one 2²=4, and one something else? Wait, 1 +4 + something =9. So something=4. So again, two 4s and one 1. So same.\n\nAlternatively, three 2²=4: 4 +4 +4=12≠9. So no.\n\nAlternatively, one 2²=4, and two  something: 4 +a +b=9. So a +b=5. As before, this leads to a=4, b=1 or a=1, b=4. So same as before.\n\nTherefore, the only possible ordered triples (a,b,c) are:\n\n1. (9,0,0) and permutations: 3 ordered triples.\n\n2. (4,4,1) and permutations: 3 ordered triples.\n\nIs that all? Wait, perhaps not. Let's check another possibility: all three coordinates are non-zero, but with squares other than 4 and 1. Wait, but the only squares available are 0,1,4,9. So if none are 9 or 4, then they must be 1 or 0, which we've already seen can't sum to 9.\n\nWait, but what about a combination of one 1, one 0, and one 8. But 8 isn't a square. So no.\n\nAlternatively, two 2s (4s) and one 1. Which is already considered.\n\nTherefore, seems like only two types of ordered triples: those with a 9 and two 0s, and those with two 4s and one 1. So total of 3 + 3 = 6 ordered triples. But wait, is that all? Let me check another case: three 3s. But 3 isn't a square. So no.\n\nAlternatively, one 3²=9, but that's already covered.\n\nWait, perhaps there's another case where we have one 1, one 2²=4, and one 2²=4. Which is the same as two 4s and one 1. So same.\n\nAlternatively, one coordinate 2²=4, and two coordinates 2²=4. Wait, that's three 4s, which sums to 12≠9. So no.\n\nAlternatively, one coordinate 1²=1, and two coordinates 3²=9. But that would be 1 +9 +9=19≠9. So no.\n\nAlternatively, one coordinate 1²=1, one coordinate 2²=4, and one coordinate 0. Then sum is 1 +4 +0=5≠9. So no.\n\nWait, maybe another case: one coordinate 2²=4, one coordinate 2²=4, and one coordinate 1²=1. Which is the same as two 4s and one 1. So same as before.\n\nAlternatively, one coordinate 2²=4, and two coordinates 2²=4. Again, three 4s: sum is 12≠9.\n\nHmm. So, seems like only two distinct types of ordered triples: those with a 9 and two 0s, and those with two 4s and one 1. Therefore, total of 3 + 3 = 6 ordered triples. However, wait a second, perhaps there's a missing case where we have three 2s (each squared to 4). But sum is 12≠9. So no.\n\nWait, let me think again. Are there any other combinations where a + b + c =9 with a, b, c ∈ {0,1,4,9}?\n\nLet me list all possible combinations:\n\n1. All three numbers are 0,1,4,9, summing to 9.\n\nPossible combinations:\n\n- 9,0,0\n\n- 4,4,1\n\n- 4,1,4\n\n- 1,4,4\n\n- 4, 0, 5 → 5 is not a square\n\n- 4, 1, 4 → already considered\n\n- 1,1,7 → 7 not a square\n\n- 1, 4, 4 → considered\n\n- 4, 4,1 → considered\n\n- 0,0,9 → considered\n\n- 0,9,0 → considered\n\n- 0,0,9 → considered\n\n- Any other?\n\nWait, what about (1, 1, 7)? 7 is not a square.\n\n(1, 0, 8): 8 not a square.\n\n(0, 0, 9): considered.\n\n(0, 4, 5): 5 not a square.\n\n(0, 1, 8): same.\n\n(4, 0, 5): same.\n\n(1, 1, 7): same.\n\nSo, indeed, the only possible combinations are (9,0,0) and permutations, and (4,4,1) and permutations. Thus, total 3 + 3 =6 ordered triples (a, b, c).\n\nBut wait, another thought: perhaps there is a combination with three 3s. But 3 isn't a square, so x=3 would lead to x²=9, but then the sum would be 9 +9 +9=27≠9. So no.\n\nAlternatively, maybe two 3s and one 3. Same issue.\n\nTherefore, the conclusion is that there are 6 ordered triples (a, b, c) where a, b, c are squares of integers, and a + b + c=9.\n\nNow, for each of these ordered triples (a, b, c), we need to compute the number of lattice points (x, y, z) that correspond to them. Remember that for each non-zero coordinate, there are two possible values (positive and negative), while zero has only one.\n\nSo, let's take each case:\n\nCase 1: (9, 0, 0)\n\nHere, one coordinate is 9, and the other two are 0. So, for example, x²=9, y²=0, z²=0. Therefore, x can be ±3, y=0, z=0. Similarly, if the 9 is in the y or z coordinate.\n\nTherefore, for each ordered triple (9,0,0), there are 2 possible points (since the non-zero coordinate can be ±3). Since there are 3 permutations (9 in x, y, or z), each gives 2 points. So total points for this case: 3 * 2 =6.\n\nCase 2: (4,4,1)\n\nHere, two coordinates are 4, and one is 1. For example, x²=4, y²=4, z²=1. Then x can be ±2, y can be ±2, z can be ±1. Each non-zero coordinate has two possibilities. Therefore, the number of points for this ordered triple is 2 (for x) * 2 (for y) * 2 (for z) =8. However, we need to check if this is correct.\n\nWait, in the ordered triple (4,4,1), each of the two 4s and the 1 can be in any permutation. Wait, no. Wait, the ordered triple (4,4,1) is fixed. For example, if the ordered triple is (4,4,1), then x²=4, y²=4, z²=1. Therefore, the number of points is 2*2*2=8. Similarly, for the ordered triple (4,1,4), which would correspond to x²=4, y²=1, z²=4, the number of points is also 8. Same for (1,4,4). Since there are three such ordered triples, each contributing 8 points, the total for this case is 3 *8=24.\n\nBut wait, let's verify. For example, take the ordered triple (4,4,1). The corresponding coordinates are x=±2, y=±2, z=±1. Each combination of signs gives a different point. There are 2 choices for x, 2 for y, 2 for z: total 8 points. Similarly for the other permutations. So yes, 3 ordered triples *8 points each=24.\n\nTherefore, total number of lattice points is 6 (from first case) +24 (from second case)=30.\n\nBut wait, is that all? Let me check if there are any other ordered triples (a, b, c) that I missed.\n\nEarlier, we concluded there are only 6 ordered triples (3 with a 9 and two 0s, 3 with two 4s and one 1), leading to 6 +24=30 points. But let me check again.\n\nWait, another thought: is there a case where all three coordinates are non-zero, and none of them is 4 or 9? For example, three 3s. But 3 isn't a square. Or two 2s and one 1: 2²+2²+1²=4+4+1=9. Wait, but 2²=4. So that's two 4s and one 1, which is the same as the second case. So already considered.\n\nAlternatively, 1²+2²+2²=1+4+4=9. Same as above.\n\nTherefore, yes, that case is already included in the two 4s and one 1.\n\nTherefore, no other possibilities.\n\nTherefore, total number of lattice points is 6 +24=30.\n\nBut let me check with an example. For instance, take the point (2,2,1). The distance is √(4+4+1)=√9=3. Yes. Similarly, (3,0,0) also has distance 3. So these points are valid.\n\nBut wait, are there any other points? Let me think. For example, (2,1,2). Yes, that's included in the permutations. Similarly, (1,2,2). All such permutations are counted in the 24.\n\nBut what about points like (2, -2, 1)? Yes, that's included in the 8 points per permutation. Negative coordinates are allowed, as long as they are integers, which they are. So each non-zero coordinate can be positive or negative, hence the multiplication by 2 for each non-zero coordinate.\n\nTherefore, each of the ordered triples (4,4,1) gives 8 points, and there are three such ordered triples, so 24 points. The ordered triples (9,0,0) give 2 points each (positive and negative 3 in one coordinate), and there are three coordinates, so 6 points.\n\nTherefore, total points:24 +6=30.\n\nTherefore, the answer should be 30.\n\nBut wait, let me check another angle. The equation x² + y² + z²=9. How many integer solutions does this equation have?\n\nAlternatively, perhaps use generating functions or other combinatorial methods, but given the small number, maybe it's manageable.\n\nBut given that I already reasoned through the cases and arrived at 30, but let me verify with another approach.\n\nAlternative approach:\n\nWe can think of the problem as finding the number of integer solutions to x² + y² + z²=9.\n\nEach solution corresponds to a lattice point at distance 3 from the origin.\n\nLet's list all possible values for x, y, z.\n\nPossible squares that add up to 9.\n\nEach coordinate can be -3, -2, -1, 0, 1, 2, 3.\n\nLet's consider the possible values for each coordinate.\n\nFor x:\n\nIf x=±3, then y and z must be 0.\n\nIf x=±2, then y² + z²=9 -4=5. The possible integer solutions for y² + z²=5 are y=±1, z=±2 or y=±2, z=±1.\n\nSimilarly, if x=±1, then y² + z²=8. The integer solutions for y² + z²=8 are y=±2, z=±2.\n\nIf x=0, then y² + z²=9. The integer solutions are y=±3, z=0 or y=0, z=±3 or y=±0, z=±3. Wait, no. If x=0, then y and z can be permutations of (±3,0) and (±0, ±3), but also other combinations. Wait, for y² + z²=9, the solutions are y=0, z=±3; y=±3, z=0; and y=±something else?\n\nWait, 9 can be written as 0 +9, 9 +0, or 1 +8, 4 +5. But 8 and 5 aren't squares. So the only solutions are permutations of (±3,0). So for y² + z²=9, solutions are y=±3, z=0; y=0, z=±3. Each of these has two possibilities for the non-zero coordinate (positive and negative). So total of 6 solutions.\n\nWait, let's check this:\n\nIf x=0, then y² + z²=9. The integer solutions are:\n\n(±3, 0, 0), (0, ±3, 0), (0, 0, ±3). Wait, no, wait. If x=0, then we're in the case where x=0, but y and z can be anything. Wait, no. If x=0, then the original equation reduces to y² + z²=9. The solutions to this are all pairs (y,z) such that y and z are integers with y² + z²=9.\n\nThe solutions are:\n\ny=0, z=±3\n\ny=±3, z=0\n\ny=±1, z=±√8 (but √8 is not integer)\n\ny=±2, z=±√5 (not integer)\n\nSo only the cases where one of y or z is ±3 and the other is 0. So there are 4 solutions when x=0: (0,3,0), (0,-3,0), (0,0,3), (0,0,-3). Wait, but actually, (0,3,0) and (0,-3,0) are two solutions for y, and (0,0,3) and (0,0,-3) are two solutions for z. So total 4 solutions when x=0. Similarly, when x=±3, we have y=0, z=0, so two solutions per x (positive and negative), so total 2 solutions. Similarly for y and z.\n\nBut wait, no. If x=3, then y=0, z=0. So (3,0,0) and (-3,0,0). Similarly for y and z. So total 6 solutions where one coordinate is ±3 and the others are 0.\n\nThen, when x=±2, then y² + z²=5. The solutions to y² + z²=5 are:\n\ny=±1, z=±2\n\ny=±2, z=±1\n\nEach of these has four combinations for each pair (y,z), considering signs. For each x=±2, we can have y=±1, z=±2 or y=±2, z=±1. For each x=±2, there are 8 solutions: 2 choices for y sign, 2 for z sign, and 2 arrangements (y=1,z=2 or y=2,z=1). So for each x=±2, 8 solutions. But since x can be ±2, that's 2 *8=16 solutions for x=±2.\n\nSimilarly, when x=±1, y² + z²=8. The integer solutions to y² + z²=8 are y=±2, z=±2. So for each x=±1, the solutions are y=±2, z=±2. There are 2 choices for y sign, 2 for z sign. So 4 solutions per x=±1. Since x can be ±1, that's 2 *4=8 solutions.\n\nTherefore, summing up all cases:\n\n- x=±3: 2 points each for x, total 6 points.\n\n- x=±2: 16 points.\n\n- x=±1:8 points.\n\n- x=0:4 points.\n\nWait, wait, this seems conflicting with the previous count. Let me re-express:\n\nWait, if we consider x=0, then the equation becomes y² + z²=9, which has 12 solutions? Wait, no. Wait, when x=0, y and z can be (±3,0), (0,±3). Each of these has two possibilities for the non-zero coordinate. So for (y,z):\n\n(3,0), (-3,0), (0,3), (0,-3). That's 4 solutions. So when x=0, we have 4 points: (0,3,0), (0,-3,0), (0,0,3), (0,0,-3). Therefore, total 4 solutions when x=0.\n\nBut earlier, when x=±3, we have (3,0,0) and (-3,0,0), which is 2 solutions.\n\nSimilarly, for y=±3 and z=±3, we have the other coordinates.\n\nBut in total, the points where one coordinate is ±3 and the others are 0 are 6 points: (3,0,0), (-3,0,0), (0,3,0), (0,-3,0), (0,0,3), (0,0,-3). So that's 6 points.\n\nThen, for x=±2: for each x=2 and x=-2, the equation y² + z²=5 has solutions (y,z)=(±1,±2) and (±2,±1). Each of these has 8 possibilities (2 signs for y, 2 signs for z, 2 permutations). So for x=2: 8 points, for x=-2: another 8 points. Total 16 points.\n\nSimilarly, for x=±1: y² + z²=8. The solutions are y=±2, z=±2. So for each x=1: y=±2, z=±2, which is 4 points. Similarly for x=-1: 4 points. Total 8 points.\n\nAdditionally, when x=0, y² + z²=9 has 4 points: (0,3,0), (0,-3,0), (0,0,3), (0,0,-3). Wait, but earlier I thought there are 4 points when x=0, but actually, when x=0, the solutions are:\n\n(0, 3, 0)\n\n(0, -3, 0)\n\n(0, 0, 3)\n\n(0, 0, -3)\n\nSo 4 points. But we already counted the six points where one coordinate is ±3 and the others zero. Wait, no. The six points where one coordinate is ±3 and the others zero are:\n\n(±3,0,0), (0,±3,0), (0,0,±3). That's 6 points. But when x=0, the equation y² + z²=9 includes points like (0,3,0) and (0,-3,0), which are part of the six points. The other two points when x=0 are (0,0,3) and (0,0,-3). Wait, but those are part of the six points as well. So in reality, when x=0, the four points are part of the six points where one coordinate is ±3 and the others are zero. Therefore, the six points are all accounted for in the case where one coordinate is ±3.\n\nTherefore, when x=0, the four points are part of those six. So the total count should be:\n\n- 6 points where one coordinate is ±3.\n\n- 16 points where x=±2 and y,z are non-zero.\n\n- 8 points where x=±1 and y,z are non-zero.\n\nBut wait, but when x=0, we have the points where y or z is ±3, but those are already counted in the six points.\n\nSo total points:6 +16 +8=30. Which matches our previous calculation.\n\nTherefore, the total number of lattice points at distance 3 from the origin is 30.\n\nTherefore, the answer is 30.\n\n**Final Answer**\nThe number of lattice points is \\boxed{30}.",
+  "segments": [
+    {
+      "i": 0,
+      "text": "Okay, so the problem is asking for the number of lattice points in three-dimensional space that are exactly 3 units away from the origin."
+    },
+    {
+      "i": 1,
+      "text": "A lattice point is one where all coordinates are integers."
+    },
+    {
+      "i": 2,
+      "text": "Alright, let me start by recalling what this means."
+    },
+    {
+      "i": 3,
+      "text": "In three dimensions, a lattice point has coordinates (x, y, z) where x, y, and z are all integers."
+    },
+    {
+      "i": 4,
+      "text": "The distance from the origin to such a point is given by the Euclidean distance formula: √(x² + y² + z²)."
+    },
+    {
+      "i": 5,
+      "text": "The problem states that this distance should be 3."
+    },
+    {
+      "i": 6,
+      "text": "So, mathematically, we need to find all integer solutions (x, y, z) to the equation:"
+    },
+    {
+      "i": 7,
+      "text": "√(x² + y² + z²) = 3"
+    },
+    {
+      "i": 8,
+      "text": "If I square both sides to eliminate the square root, the equation becomes:"
+    },
+    {
+      "i": 9,
+      "text": "x² + y² + z² = 9"
+    },
+    {
+      "i": 10,
+      "text": "So now, the problem reduces to finding all integer triples (x, y, z) such that the sum of their squares is 9."
+    },
+    {
+      "i": 11,
+      "text": "Each such triple corresponds to a lattice point at distance 3 from the origin."
+    },
+    {
+      "i": 12,
+      "text": "Let me think about how to approach this systematically."
+    },
+    {
+      "i": 13,
+      "text": "Since all coordinates are integers, their squares are non-negative integers."
+    },
+    {
+      "i": 14,
+      "text": "The maximum possible value for any coordinate squared is 9, because if, say, x² = 9, then y² and z² must both be zero."
+    },
+    {
+      "i": 15,
+      "text": "So each coordinate can be between -3 and 3, inclusive."
+    },
+    {
+      "i": 16,
+      "text": "That gives me a finite set of possibilities to check, but I should find a way to count them without checking each one individually."
+    },
+    {
+      "i": 17,
+      "text": "First, let's consider the possible values that x², y², and z² can take."
+    },
+    {
+      "i": 18,
+      "text": "Since they are squares, each term must be a non-negative integer."
+    },
+    {
+      "i": 19,
+      "text": "So, we need to find all ordered triples (a, b, c) where a, b, c are non-negative integers, a + b + c = 9, and each of a, b, c is a perfect square."
+    },
+    {
+      "i": 20,
+      "text": "Wait, no—actually, x², y², z² are non-negative integers whose sum is 9, but they don't necessarily have to be perfect squares themselves."
+    },
+    {
+      "i": 21,
+      "text": "Wait, no, that's a confusion here."
+    },
+    {
+      "i": 22,
+      "text": "Wait, x, y, z are integers, so x², y², z² are squares of integers, hence non-negative integers."
+    },
+    {
+      "i": 23,
+      "text": "So the problem reduces to finding all ordered triples (x², y², z²) where each is a non-negative integer square and their sum is 9."
+    },
+    {
+      "i": 24,
+      "text": "Then, for each such triple, we can compute the number of corresponding lattice points by considering the signs of x, y, z."
+    },
+    {
+      "i": 25,
+      "text": "Therefore, the approach should be:"
+    },
+    {
+      "i": 26,
+      "text": "1."
+    },
+    {
+      "i": 27,
+      "text": "Enumerate all possible combinations of non-negative integers a, b, c such that a + b + c = 9, where each of a, b, c is a perfect square (i.e., a = x², b = y², c = z² for integers x, y, z)."
+    },
+    {
+      "i": 28,
+      "text": "2."
+    },
+    {
+      "i": 29,
+      "text": "For each combination (a, b, c), determine how many ordered triples (x, y, z) correspond to it, considering that each coordinate can be positive or negative (unless the coordinate is zero, which has only one possibility)."
+    },
+    {
+      "i": 30,
+      "text": "So, first step: find all possible perfect squares a, b, c such that a + b + c = 9."
+    },
+    {
+      "i": 31,
+      "text": "The perfect squares less than or equal to 9 are 0, 1, 4, 9."
+    },
+    {
+      "i": 32,
+      "text": "Therefore, each of a, b, c can be 0, 1, 4, or 9."
+    },
+    {
+      "i": 33,
+      "text": "Now, we need to find all ordered triples (a, b, c) of these numbers that add up to 9."
+    },
+    {
+      "i": 34,
+      "text": "To do this systematically, let's consider the possible values for a, then for each a, the possible values for b, then c is determined as 9 - a - b."
+    },
+    {
+      "i": 35,
+      "text": "But we need to ensure that c is also a perfect square (0, 1, 4, 9) and non-negative."
+    },
+    {
+      "i": 36,
+      "text": "Alternatively, we can list all possible combinations."
+    },
+    {
+      "i": 37,
+      "text": "Let's start with the largest possible square, which is 9."
+    },
+    {
+      "i": 38,
+      "text": "Case 1: One of a, b, c is 9."
+    },
+    {
+      "i": 39,
+      "text": "Suppose a = 9."
+    },
+    {
+      "i": 40,
+      "text": "Then b + c = 0."
+    },
+    {
+      "i": 41,
+      "text": "The only possibility is b = 0, c = 0."
+    },
+    {
+      "i": 42,
+      "text": "Similarly, if b = 9, then a + c = 0, so a = 0, c = 0."
+    },
+    {
+      "i": 43,
+      "text": "Similarly for c = 9."
+    },
+    {
+      "i": 44,
+      "text": "So there are 3 ordered triples here: (9,0,0), (0,9,0), (0,0,9)."
+    },
+    {
+      "i": 45,
+      "text": "Each corresponds to permutations of 9, 0, 0."
+    },
+    {
+      "i": 46,
+      "text": "Case 2: One of a, b, c is 4."
+    },
+    {
+      "i": 47,
+      "text": "Then the remaining sum is 9 - 4 = 5."
+    },
+    {
+      "i": 48,
+      "text": "Now, we need to split 5 into two perfect squares (each of which can be 0,1,4)."
+    },
+    {
+      "i": 49,
+      "text": "Let's check possible combinations."
+    },
+    {
+      "i": 50,
+      "text": "Possible squares for the next term: 4, 1, 0."
+    },
+    {
+      "i": 51,
+      "text": "If we take 4: 4 + 4 = 8 > 5, so too big."
+    },
+    {
+      "i": 52,
+      "text": "If we take 4 + 1 = 5."
+    },
+    {
+      "i": 53,
+      "text": "That works."
+    },
+    {
+      "i": 54,
+      "text": "So 4, 1, 0."
+    },
+    {
+      "i": 55,
+      "text": "Wait, but 5 can be split as 4 + 1, or 1 + 4, or 5 + 0 (but 5 isn't a square)."
+    },
+    {
+      "i": 56,
+      "text": "Wait, since the remaining sum after 4 is 5, we need two squares that add up to 5."
+    },
+    {
+      "i": 57,
+      "text": "The squares available are 0, 1, 4."
+    },
+    {
+      "i": 58,
+      "text": "So possible combinations:"
+    },
+    {
+      "i": 59,
+      "text": "4 + 1: 4 + 1 = 5"
+    },
+    {
+      "i": 60,
+      "text": "1 + 4: same as above, but since order matters in the ordered triples, these would be different."
+    },
+    {
+      "i": 61,
+      "text": "Wait, actually, since in the ordered triples (a, b, c), once we fix one coordinate as 4, the remaining two coordinates have to sum to 5, and each is a square."
+    },
+    {
+      "i": 62,
+      "text": "Let's see:"
+    },
+    {
+      "i": 63,
+      "text": "Suppose a = 4."
+    },
+    {
+      "i": 64,
+      "text": "Then b + c = 5."
+    },
+    {
+      "i": 65,
+      "text": "Now, possible pairs (b, c) where both b and c are squares (0,1,4):"
+    },
+    {
+      "i": 66,
+      "text": "Check possible b:"
+    },
+    {
+      "i": 67,
+      "text": "If b = 4, then c = 1."
+    },
+    {
+      "i": 68,
+      "text": "So (4,4,1)"
+    },
+    {
+      "i": 69,
+      "text": "If b = 1, then c = 4."
+    },
+    {
+      "i": 70,
+      "text": "So (4,1,4)"
+    },
+    {
+      "i": 71,
+      "text": "If b = 0, then c = 5, but 5 isn't a square."
+    },
+    {
+      "i": 72,
+      "text": "So only two possibilities here: (4,4,1) and (4,1,4)."
+    },
+    {
+      "i": 73,
+      "text": "But wait, actually, since a is fixed at 4, and b and c can be arranged in different orders."
+    },
+    {
+      "i": 74,
+      "text": "However, in the original problem, the coordinates are ordered (x, y, z)."
+    },
+    {
+      "i": 75,
+      "text": "So the triples (4,4,1), (4,1,4), (1,4,4) are different."
+    },
+    {
+      "i": 76,
+      "text": "Wait, but hold on: in this case, when a = 4, then we need to split 5 into b + c."
+    },
+    {
+      "i": 77,
+      "text": "The possible pairs are (4,1) and (1,4)."
+    },
+    {
+      "i": 78,
+      "text": "So that would lead to (4,4,1) and (4,1,4)."
+    },
+    {
+      "i": 79,
+      "text": "Then, if we consider permutations where the 4 is in different positions, like (4,4,1), (4,1,4), (1,4,4), etc., but each of these would correspond to different cases when considering all permutations."
+    },
+    {
+      "i": 80,
+      "text": "Wait, perhaps a better approach is to first list all possible unordered combinations and then compute the number of ordered permutations for each."
+    },
+    {
+      "i": 81,
+      "text": "Alternatively, let's approach it step by step."
+    },
+    {
+      "i": 82,
+      "text": "First, when we have one coordinate squared equal to 4, and the sum of the other two is 5."
+    },
+    {
+      "i": 83,
+      "text": "So for example, if a=4, then we need b and c such that b² + c² =5."
+    },
+    {
+      "i": 84,
+      "text": "Wait, no, hold on."
+    },
+    {
+      "i": 85,
+      "text": "Wait, in the previous step, after squaring, we had that x², y², z² are a, b, c."
+    },
+    {
+      "i": 86,
+      "text": "So in the case where a=4, we have x²=4, so x=±2."
+    },
+    {
+      "i": 87,
+      "text": "Then, the sum of y² and z² is 5."
+    },
+    {
+      "i": 88,
+      "text": "But y² and z² must be integers, so possible pairs (y², z²) that sum to 5."
+    },
+    {
+      "i": 89,
+      "text": "Since 5 can be written as 4 + 1 or 1 + 4."
+    },
+    {
+      "i": 90,
+      "text": "So (4,1) or (1,4)."
+    },
+    {
+      "i": 91,
+      "text": "So for each such pair, we can have y²=4 and z²=1, or y²=1 and z²=4."
+    },
+    {
+      "i": 92,
+      "text": "Therefore, for each such a=4, we have two different ordered pairs (b, c): (4,1) and (1,4)."
+    },
+    {
+      "i": 93,
+      "text": "Each of these would correspond to different coordinates."
+    },
+    {
+      "i": 94,
+      "text": "Then, considering permutations across the three coordinates."
+    },
+    {
+      "i": 95,
+      "text": "But maybe it's better to handle all possible combinations."
+    },
+    {
+      "i": 96,
+      "text": "Wait, let's try to structure this."
+    },
+    {
+      "i": 97,
+      "text": "First, let's consider all possible triplets (a, b, c) where a, b, c ∈ {0, 1, 4, 9} and a + b + c = 9."
+    },
+    {
+      "i": 98,
+      "text": "Start with the case where one of the squares is 9."
+    },
+    {
+      "i": 99,
+      "text": "As before, this leads to (9,0,0) and permutations, which are 3 ordered triples."
+    },
+    {
+      "i": 100,
+      "text": "Case where one of the squares is 4."
+    },
+    {
+      "i": 101,
+      "text": "So we have to consider all ordered triples where one element is 4, and the other two sum to 5."
+    },
+    {
+      "i": 102,
+      "text": "But the other two elements must be in {0,1,4} and sum to 5."
+    },
+    {
+      "i": 103,
+      "text": "Possible pairs for the remaining two numbers:"
+    },
+    {
+      "i": 104,
+      "text": "- 4 and 1 (since 4 +1 =5)"
+    },
+    {
+      "i": 105,
+      "text": "- 1 and 4 (same as above)"
+    },
+    {
+      "i": 106,
+      "text": "- 5 and 0 (but 5 isn't a square)"
+    },
+    {
+      "i": 107,
+      "text": "- 0 and 5 (same)"
+    },
+    {
+      "i": 108,
+      "text": "So the only possible pairs are (4,1) and (1,4)."
+    },
+    {
+      "i": 109,
+      "text": "Thus, for each coordinate where the 4 is placed, the remaining two coordinates can be (4,1) or (1,4)."
+    },
+    {
+      "i": 110,
+      "text": "However, since the coordinates are ordered, each permutation counts."
+    },
+    {
+      "i": 111,
+      "text": "Wait, actually, if we fix one coordinate as 4, say the first one, then the remaining two coordinates need to sum to 5, which can be 4 and 1."
+    },
+    {
+      "i": 112,
+      "text": "So the ordered triples would be (4,4,1), (4,1,4)."
+    },
+    {
+      "i": 113,
+      "text": "Then, for each position of the 4 (first, second, third), we have similar possibilities."
+    },
+    {
+      "i": 114,
+      "text": "Wait, no."
+    },
+    {
+      "i": 115,
+      "text": "Wait, if we fix a coordinate as 4, say a=4, then the remaining coordinates can be (4,1) or (1,4)."
+    },
+    {
+      "i": 116,
+      "text": "So each coordinate position for the 4 would lead to two ordered triples."
+    },
+    {
+      "i": 117,
+      "text": "Therefore, for each of the three positions (a, b, c), we have two ordered triples each."
+    },
+    {
+      "i": 118,
+      "text": "Therefore, 3 positions * 2 = 6 ordered triples where one coordinate is 4, another is 4, and the third is 1, arranged in different orders."
+    },
+    {
+      "i": 119,
+      "text": "Wait, but hold on."
+    },
+    {
+      "i": 120,
+      "text": "Let me clarify."
+    },
+    {
+      "i": 121,
+      "text": "If we have a 4 in one coordinate, then the other two coordinates need to add up to 5."
+    },
+    {
+      "i": 122,
+      "text": "The possible ordered pairs for the other two coordinates are (4,1) and (1,4)."
+    },
+    {
+      "i": 123,
+      "text": "So if the 4 is in the first coordinate, the ordered triples are (4,4,1) and (4,1,4)."
+    },
+    {
+      "i": 124,
+      "text": "Similarly, if the 4 is in the second coordinate, the ordered triples are (4,4,1) and (1,4,4)."
+    },
+    {
+      "i": 125,
+      "text": "Wait, no."
+    },
+    {
+      "i": 126,
+      "text": "Wait, if the 4 is in the second coordinate, then the other two coordinates (first and third) need to add up to 5."
+    },
+    {
+      "i": 127,
+      "text": "So the ordered triples would be (4,4,1) and (1,4,4)."
+    },
+    {
+      "i": 128,
+      "text": "Similarly, if the 4 is in the third coordinate, the ordered triples would be (4,1,4) and (1,4,4)."
+    },
+    {
+      "i": 129,
+      "text": "But hold on, this seems overlapping."
+    },
+    {
+      "i": 130,
+      "text": "Wait, perhaps the correct count is that for each position of the 4 (three positions), and for each, two ordered pairs for the remaining coordinates."
+    },
+    {
+      "i": 131,
+      "text": "However, some of these might overlap."
+    },
+    {
+      "i": 132,
+      "text": "Wait, actually, let's list them all:"
+    },
+    {
+      "i": 133,
+      "text": "1."
+    },
+    {
+      "i": 134,
+      "text": "4 in the first coordinate:"
+    },
+    {
+      "i": 135,
+      "text": "- (4,4,1)"
+    },
+    {
+      "i": 136,
+      "text": "- (4,1,4)"
+    },
+    {
+      "i": 137,
+      "text": "2."
+    },
+    {
+      "i": 138,
+      "text": "4 in the second coordinate:"
+    },
+    {
+      "i": 139,
+      "text": "- (4,4,1)"
+    },
+    {
+      "i": 140,
+      "text": "- (1,4,4)"
+    },
+    {
+      "i": 141,
+      "text": "3."
+    },
+    {
+      "i": 142,
+      "text": "4 in the third coordinate:"
+    },
+    {
+      "i": 143,
+      "text": "- (4,1,4)"
+    },
+    {
+      "i": 144,
+      "text": "- (1,4,4)"
+    },
+    {
+      "i": 145,
+      "text": "But here, (4,4,1) appears in both positions 1 and 2."
+    },
+    {
+      "i": 146,
+      "text": "Similarly, (4,1,4) appears in positions 1 and 3, and (1,4,4) appears in positions 2 and 3."
+    },
+    {
+      "i": 147,
+      "text": "Wait, so actually, each of these ordered triples is counted twice."
+    },
+    {
+      "i": 148,
+      "text": "Therefore, the total unique ordered triples are three: (4,4,1), (4,1,4), (1,4,4)."
+    },
+    {
+      "i": 149,
+      "text": "Each of these can be achieved in two different ways, but since we are considering ordered triples, they are distinct based on the position of the 1."
+    },
+    {
+      "i": 150,
+      "text": "Wait, perhaps I made a mistake here."
+    },
+    {
+      "i": 151,
+      "text": "Let me clarify."
+    },
+    {
+      "i": 152,
+      "text": "If the main 4 is in the first coordinate, then the remaining two coordinates can be (4,1) or (1,4)."
+    },
+    {
+      "i": 153,
+      "text": "So (4,4,1) and (4,1,4)."
+    },
+    {
+      "i": 154,
+      "text": "Similarly, if the main 4 is in the second coordinate, the remaining two coordinates can be (4,1) or (1,4), leading to (4,4,1) and (1,4,4)."
+    },
+    {
+      "i": 155,
+      "text": "If the main 4 is in the third coordinate, the remaining two coordinates can be (4,1) or (1,4), leading to (4,1,4) and (1,4,4)."
+    },
+    {
+      "i": 156,
+      "text": "So the unique ordered triples here are (4,4,1), (4,1,4), and (1,4,4)."
+    },
+    {
+      "i": 157,
+      "text": "Each of these can be formed in two different ways depending on which coordinate the main 4 is in, but since we're considering all permutations, each of these ordered triples is unique."
+    },
+    {
+      "i": 158,
+      "text": "Therefore, there are 3 ordered triples where one coordinate is 4, another is 4, and the third is 1."
+    },
+    {
+      "i": 159,
+      "text": "Wait, no, actually, (4,4,1) is a different ordered triple than (4,1,4)."
+    },
+    {
+      "i": 160,
+      "text": "Each has the 4s in different positions."
+    },
+    {
+      "i": 161,
+      "text": "So in total, there are 3 ordered triples here, each with two 4s and one 1."
+    },
+    {
+      "i": 162,
+      "text": "Wait, no, each has one 4, one 4, and one 1, arranged differently."
+    },
+    {
+      "i": 163,
+      "text": "So yes, three ordered triples."
+    },
+    {
+      "i": 164,
+      "text": "But wait, each of these ordered triples (4,4,1), (4,1,4), (1,4,4) corresponds to two different original placements (depending on which coordinate was fixed first)."
+    },
+    {
+      "i": 165,
+      "text": "But since they are considered as ordered triples, all permutations are separate."
+    },
+    {
+      "i": 166,
+      "text": "Wait, but in reality, when we fix a coordinate as 4 and then arrange the remaining two, we get different ordered triples."
+    },
+    {
+      "i": 167,
+      "text": "For example:"
+    },
+    {
+      "i": 168,
+      "text": "- Fix first coordinate as 4: possible ordered triples (4,4,1) and (4,1,4)"
+    },
+    {
+      "i": 169,
+      "text": "- Fix second coordinate as 4: possible ordered triples (4,4,1) and (1,4,4)"
+    },
+    {
+      "i": 170,
+      "text": "- Fix third coordinate as 4: possible ordered triples (4,1,4) and (1,4,4)"
+    },
+    {
+      "i": 171,
+      "text": "Thus, in total, we have six ordered triples?"
+    },
+    {
+      "i": 172,
+      "text": "But that can't be, since (4,4,1) is repeated when fixing first and second coordinates."
+    },
+    {
+      "i": 173,
+      "text": "Wait, no."
+    },
+    {
+      "i": 174,
+      "text": "Wait, if I fix first coordinate as 4 and arrange the remaining two as (4,1) or (1,4), then I get (4,4,1) and (4,1,4)."
+    },
+    {
+      "i": 175,
+      "text": "If I fix the second coordinate as 4, then arrange the remaining two as (4,1) or (1,4), then I get (4,4,1) and (1,4,4)."
+    },
+    {
+      "i": 176,
+      "text": "Similarly, fixing the third coordinate gives (4,1,4) and (1,4,4)."
+    },
+    {
+      "i": 177,
+      "text": "But in reality, (4,4,1) is the same as (4,4,1) regardless of which coordinate was fixed first."
+    },
+    {
+      "i": 178,
+      "text": "Wait, no, the ordered triples are unique."
+    },
+    {
+      "i": 179,
+      "text": "So (4,4,1) is different from (4,1,4) and (1,4,4)."
+    },
+    {
+      "i": 180,
+      "text": "So each of these is a distinct ordered triple."
+    },
+    {
+      "i": 181,
+      "text": "Therefore, the total number of ordered triples where one coordinate is 4, one is 4, and one is 1 is 3: (4,4,1), (4,1,4), (1,4,4)."
+    },
+    {
+      "i": 182,
+      "text": "Each of these has two 4s and one 1."
+    },
+    {
+      "i": 183,
+      "text": "But wait, when you fix different coordinates, you get different ordered triples."
+    },
+    {
+      "i": 184,
+      "text": "So the total number of ordered triples here is actually 3 * 2 = 6?"
+    },
+    {
+      "i": 185,
+      "text": "No, because when you fix the first coordinate as 4, you get two ordered triples: (4,4,1) and (4,1,4)."
+    },
+    {
+      "i": 186,
+      "text": "Fixing the second coordinate as 4 gives (4,4,1) and (1,4,4)."
+    },
+    {
+      "i": 187,
+      "text": "Fixing the third coordinate as 4 gives (4,1,4) and (1,4,4)."
+    },
+    {
+      "i": 188,
+      "text": "So in total, we have (4,4,1), (4,1,4), (1,4,4), each appearing twice."
+    },
+    {
+      "i": 189,
+      "text": "Therefore, the unique ordered triples are three: (4,4,1), (4,1,4), and (1,4,4)."
+    },
+    {
+      "i": 190,
+      "text": "Each of these can be obtained in two different ways (depending on which coordinate was fixed first), but since they are the same ordered triples, we count them once each."
+    },
+    {
+      "i": 191,
+      "text": "Hence, three ordered triples where two coordinates are 4 and one is 1."
+    },
+    {
+      "i": 192,
+      "text": "Wait, but no."
+    },
+    {
+      "i": 193,
+      "text": "The problem is that in the process above, when you fix different coordinates, you might generate the same ordered triple."
+    },
+    {
+      "i": 194,
+      "text": "For example, if you fix the first coordinate as 4 and arrange (4,1), you get (4,4,1)."
+    },
+    {
+      "i": 195,
+      "text": "If you fix the second coordinate as 4 and arrange (4,1) in the first and third, you also get (4,4,1)."
+    },
+    {
+      "i": 196,
+      "text": "So this ordered triple is generated by two different fixations, but it's still one unique ordered triple."
+    },
+    {
+      "i": 197,
+      "text": "Therefore, the total number of ordered triples in this case is three: (4,4,1), (4,1,4), and (1,4,4)."
+    },
+    {
+      "i": 198,
+      "text": "Each has two 4s and one 1."
+    },
+    {
+      "i": 199,
+      "text": "But wait, 4 + 4 + 1 = 9, yes."
+    },
+    {
+      "i": 200,
+      "text": "So that's correct."
+    },
+    {
+      "i": 201,
+      "text": "Then, moving on, next case where one coordinate is 4 and the other two coordinates sum to 5."
+    },
+    {
+      "i": 202,
+      "text": "Wait, but we just considered that."
+    },
+    {
+      "i": 203,
+      "text": "Are there any other combinations where one coordinate is 4?"
+    },
+    {
+      "i": 204,
+      "text": "Wait, suppose instead of two coordinates being 4 and 1, maybe there are other possibilities."
+    },
+    {
+      "i": 205,
+      "text": "For example, if a=4, then b + c=5."
+    },
+    {
+      "i": 206,
+      "text": "The possible pairs (b,c) are (4,1) and (1,4)."
+    },
+    {
+      "i": 207,
+      "text": "We already considered that."
+    },
+    {
+      "i": 208,
+      "text": "There's no other way to express 5 as the sum of two squares from {0,1,4}."
+    },
+    {
+      "i": 209,
+      "text": "For example, 5 can't be expressed as 1 + 1 + 3, but 3 isn't a square."
+    },
+    {
+      "i": 210,
+      "text": "So no, only 4 + 1."
+    },
+    {
+      "i": 211,
+      "text": "So in this case, when one coordinate is 4, the other two must be 4 and 1 in some order."
+    },
+    {
+      "i": 212,
+      "text": "Wait, but 4 + 1 =5."
+    },
+    {
+      "i": 213,
+      "text": "So each time we have a 4, the other two coordinates must add up to 5, which can only be done with 4 and 1."
+    },
+    {
+      "i": 214,
+      "text": "Therefore, the only ordered triples here are the three permutations of (4,4,1)."
+    },
+    {
+      "i": 215,
+      "text": "Wait, but wait, hold on."
+    },
+    {
+      "i": 216,
+      "text": "Let's consider another scenario where one coordinate is 4, and the other two coordinates are 1 and 4."
+    },
+    {
+      "i": 217,
+      "text": "Wait, that's the same as above."
+    },
+    {
+      "i": 218,
+      "text": "Alternatively, could there be another combination where, for example, a=4, and the other two coordinates are both 1s?"
+    },
+    {
+      "i": 219,
+      "text": "But 1 +1=2, which is not 5."
+    },
+    {
+      "i": 220,
+      "text": "So no."
+    },
+    {
+      "i": 221,
+      "text": "Alternatively, a=4, then b=0, c=5, but 5 is not a square."
+    },
+    {
+      "i": 222,
+      "text": "So no."
+    },
+    {
+      "i": 223,
+      "text": "Therefore, the only possible combinations when one coordinate is 4 are the three permutations of (4,4,1)."
+    },
+    {
+      "i": 224,
+      "text": "Wait, but 4 +4 +1=9."
+    },
+    {
+      "i": 225,
+      "text": "So each of these ordered triples sums to 9."
+    },
+    {
+      "i": 226,
+      "text": "So these are valid."
+    },
+    {
+      "i": 227,
+      "text": "So, moving on."
+    },
+    {
+      "i": 228,
+      "text": "So far, we have:"
+    },
+    {
+      "i": 229,
+      "text": "- 3 ordered triples with one 9 and two 0s."
+    },
+    {
+      "i": 230,
+      "text": "- 3 ordered triples with two 4s and one 1."
+    },
+    {
+      "i": 231,
+      "text": "Now, are there any other ordered triples where one coordinate is 4?"
+    },
+    {
+      "i": 232,
+      "text": "Let's check."
+    },
+    {
+      "i": 233,
+      "text": "Suppose we have one coordinate as 4, and the other two coordinates as 0 and 5."
+    },
+    {
+      "i": 234,
+      "text": "But 5 isn't a square, so that's invalid."
+    },
+    {
+      "i": 235,
+      "text": "So no."
+    },
+    {
+      "i": 236,
+      "text": "Alternatively, one coordinate as 4, and the other two as 1 and 4."
+    },
+    {
+      "i": 237,
+      "text": "Wait, that's the same as above."
+    },
+    {
+      "i": 238,
+      "text": "Alternatively, one coordinate as 4, and the others as 2²=4, but 2²=4, but 4 +4 +4=12≠9."
+    },
+    {
+      "i": 239,
+      "text": "So that's too big."
+    },
+    {
+      "i": 240,
+      "text": "So no, only the three ordered triples with two 4s and one 1."
+    },
+    {
+      "i": 241,
+      "text": "Now, next case: no coordinate is 9 or 4."
+    },
+    {
+      "i": 242,
+      "text": "Then all coordinates must be 0, 1."
+    },
+    {
+      "i": 243,
+      "text": "Wait, but 0 +0 +0=0, which is less than 9."
+    },
+    {
+      "i": 244,
+      "text": "1 +1 +1=3, still less."
+    },
+    {
+      "i": 245,
+      "text": "So this is impossible."
+    },
+    {
+      "i": 246,
+      "text": "Therefore, we must have at least one coordinate being 4 or 9."
+    },
+    {
+      "i": 247,
+      "text": "Wait, but wait, let's check."
+    },
+    {
+      "i": 248,
+      "text": "Suppose all coordinates are 1s and 0s."
+    },
+    {
+      "i": 249,
+      "text": "The maximum sum would be 3 (three 1s)."
+    },
+    {
+      "i": 250,
+      "text": "Which is less than 9."
+    },
+    {
+      "i": 251,
+      "text": "So that's impossible."
+    },
+    {
+      "i": 252,
+      "text": "Alternatively, if we have coordinates with 3²=9, but 3 is not a perfect square?"
+    },
+    {
+      "i": 253,
+      "text": "Wait, 3 isn't a perfect square."
+    },
+    {
+      "i": 254,
+      "text": "Wait, 3 is not a square of an integer."
+    },
+    {
+      "i": 255,
+      "text": "The squares are 0,1,4,9,16, etc."
+    },
+    {
+      "i": 256,
+      "text": "So the only possible squares up to 9 are 0,1,4,9."
+    },
+    {
+      "i": 257,
+      "text": "Therefore, the only possible components are those."
+    },
+    {
+      "i": 258,
+      "text": "Therefore, the only remaining case is when all coordinates are 1s and 0s and 4s, but without any 9 or more than two 4s."
+    },
+    {
+      "i": 259,
+      "text": "Wait, but we already considered cases with 9 and cases with two 4s and one 1."
+    },
+    {
+      "i": 260,
+      "text": "Wait, perhaps another case: one coordinate is 4, and the other two coordinates sum to 5, but using different squares."
+    },
+    {
+      "i": 261,
+      "text": "Wait, but as established earlier, 5 can only be written as 4 +1."
+    },
+    {
+      "i": 262,
+      "text": "So that case is already covered."
+    },
+    {
+      "i": 263,
+      "text": "Wait, perhaps the case where one coordinate is 1, and the other two sum to 8."
+    },
+    {
+      "i": 264,
+      "text": "But 8 can be expressed as 4 +4."
+    },
+    {
+      "i": 265,
+      "text": "So that would be (1,4,4)."
+    },
+    {
+      "i": 266,
+      "text": "Wait, that's the same as the previous case."
+    },
+    {
+      "i": 267,
+      "text": "So (1,4,4) is already counted."
+    },
+    {
+      "i": 268,
+      "text": "Alternatively, what if we have three 1s?"
+    },
+    {
+      "i": 269,
+      "text": "1 +1 +1=3≠9."
+    },
+    {
+      "i": 270,
+      "text": "So that's too small."
+    },
+    {
+      "i": 271,
+      "text": "So not possible."
+    },
+    {
+      "i": 272,
+      "text": "Alternatively, combinations of 1s and 4s."
+    },
+    {
+      "i": 273,
+      "text": "For example, two 4s and one 1: which we've already considered."
+    },
+    {
+      "i": 274,
+      "text": "Alternatively, one 4 and five 1s."
+    },
+    {
+      "i": 275,
+      "text": "Wait, but five 1s would require five coordinates, but we only have three coordinates."
+    },
+    {
+      "i": 276,
+      "text": "So that's impossible."
+    },
+    {
+      "i": 277,
+      "text": "Alternatively, two 1s and one 7."
+    },
+    {
+      "i": 278,
+      "text": "But 7 isn't a square."
+    },
+    {
+      "i": 279,
+      "text": "So no."
+    },
+    {
+      "i": 280,
+      "text": "Alternatively, one 1 and two 4s."
+    },
+    {
+      "i": 281,
+      "text": "Wait, that's the same as before."
+    },
+    {
+      "i": 282,
+      "text": "1 +4 +4=9."
+    },
+    {
+      "i": 283,
+      "text": "Therefore, the only other case is when all three coordinates are non-zero and none are 9."
+    },
+    {
+      "i": 284,
+      "text": "Let's see if there are solutions where all three squares are 1 or 4."
+    },
+    {
+      "i": 285,
+      "text": "For example, 1 +1 +7=9, but 7 isn't a square."
+    },
+    {
+      "i": 286,
+      "text": "1 +4 +4=9, which is already considered."
+    },
+    {
+      "i": 287,
+      "text": "4 +4 +1=9, same."
+    },
+    {
+      "i": 288,
+      "text": "Alternatively, three 3s: but 3 isn't a square."
+    },
+    {
+      "i": 289,
+      "text": "3²=9, but that would be one 9 and two 0s, already considered."
+    },
+    {
+      "i": 290,
+      "text": "Alternatively, two 2s: 2²=4, so two 4s and one 1, which is the same as before."
+    },
+    {
+      "i": 291,
+      "text": "Therefore, seems like the only possible ordered triples are the ones with one 9 and two 0s, and the ones with two 4s and one 1."
+    },
+    {
+      "i": 292,
+      "text": "But wait, let's check another case: three 3s."
+    },
+    {
+      "i": 293,
+      "text": "But 3 isn't an integer square."
+    },
+    {
+      "i": 294,
+      "text": "3²=9, which is already covered."
+    },
+    {
+      "i": 295,
+      "text": "Wait, hold on."
+    },
+    {
+      "i": 296,
+      "text": "What about a combination of one 1, one 2²=4, and one 2²=4."
+    },
+    {
+      "i": 297,
+      "text": "That's again two 4s and one 1, which is the same as before."
+    },
+    {
+      "i": 298,
+      "text": "Alternatively, is there a combination where we have one 1, one 2²=4, and one something else?"
+    },
+    {
+      "i": 299,
+      "text": "Wait, 1 +4 + something =9."
+    },
+    {
+      "i": 300,
+      "text": "So something=4."
+    },
+    {
+      "i": 301,
+      "text": "So again, two 4s and one 1."
+    },
+    {
+      "i": 302,
+      "text": "So same."
+    },
+    {
+      "i": 303,
+      "text": "Alternatively, three 2²=4: 4 +4 +4=12≠9."
+    },
+    {
+      "i": 304,
+      "text": "So no."
+    },
+    {
+      "i": 305,
+      "text": "Alternatively, one 2²=4, and two  something: 4 +a +b=9."
+    },
+    {
+      "i": 306,
+      "text": "So a +b=5."
+    },
+    {
+      "i": 307,
+      "text": "As before, this leads to a=4, b=1 or a=1, b=4."
+    },
+    {
+      "i": 308,
+      "text": "So same as before."
+    },
+    {
+      "i": 309,
+      "text": "Therefore, the only possible ordered triples (a,b,c) are:"
+    },
+    {
+      "i": 310,
+      "text": "1."
+    },
+    {
+      "i": 311,
+      "text": "(9,0,0) and permutations: 3 ordered triples."
+    },
+    {
+      "i": 312,
+      "text": "2."
+    },
+    {
+      "i": 313,
+      "text": "(4,4,1) and permutations: 3 ordered triples."
+    },
+    {
+      "i": 314,
+      "text": "Is that all?"
+    },
+    {
+      "i": 315,
+      "text": "Wait, perhaps not."
+    },
+    {
+      "i": 316,
+      "text": "Let's check another possibility: all three coordinates are non-zero, but with squares other than 4 and 1."
+    },
+    {
+      "i": 317,
+      "text": "Wait, but the only squares available are 0,1,4,9."
+    },
+    {
+      "i": 318,
+      "text": "So if none are 9 or 4, then they must be 1 or 0, which we've already seen can't sum to 9."
+    },
+    {
+      "i": 319,
+      "text": "Wait, but what about a combination of one 1, one 0, and one 8."
+    },
+    {
+      "i": 320,
+      "text": "But 8 isn't a square."
+    },
+    {
+      "i": 321,
+      "text": "So no."
+    },
+    {
+      "i": 322,
+      "text": "Alternatively, two 2s (4s) and one 1."
+    },
+    {
+      "i": 323,
+      "text": "Which is already considered."
+    },
+    {
+      "i": 324,
+      "text": "Therefore, seems like only two types of ordered triples: those with a 9 and two 0s, and those with two 4s and one 1."
+    },
+    {
+      "i": 325,
+      "text": "So total of 3 + 3 = 6 ordered triples."
+    },
+    {
+      "i": 326,
+      "text": "But wait, is that all?"
+    },
+    {
+      "i": 327,
+      "text": "Let me check another case: three 3s."
+    },
+    {
+      "i": 328,
+      "text": "But 3 isn't a square."
+    },
+    {
+      "i": 329,
+      "text": "So no."
+    },
+    {
+      "i": 330,
+      "text": "Alternatively, one 3²=9, but that's already covered."
+    },
+    {
+      "i": 331,
+      "text": "Wait, perhaps there's another case where we have one 1, one 2²=4, and one 2²=4."
+    },
+    {
+      "i": 332,
+      "text": "Which is the same as two 4s and one 1."
+    },
+    {
+      "i": 333,
+      "text": "So same."
+    },
+    {
+      "i": 334,
+      "text": "Alternatively, one coordinate 2²=4, and two coordinates 2²=4."
+    },
+    {
+      "i": 335,
+      "text": "Wait, that's three 4s, which sums to 12≠9."
+    },
+    {
+      "i": 336,
+      "text": "So no."
+    },
+    {
+      "i": 337,
+      "text": "Alternatively, one coordinate 1²=1, and two coordinates 3²=9."
+    },
+    {
+      "i": 338,
+      "text": "But that would be 1 +9 +9=19≠9."
+    },
+    {
+      "i": 339,
+      "text": "So no."
+    },
+    {
+      "i": 340,
+      "text": "Alternatively, one coordinate 1²=1, one coordinate 2²=4, and one coordinate 0."
+    },
+    {
+      "i": 341,
+      "text": "Then sum is 1 +4 +0=5≠9."
+    },
+    {
+      "i": 342,
+      "text": "So no."
+    },
+    {
+      "i": 343,
+      "text": "Wait, maybe another case: one coordinate 2²=4, one coordinate 2²=4, and one coordinate 1²=1."
+    },
+    {
+      "i": 344,
+      "text": "Which is the same as two 4s and one 1."
+    },
+    {
+      "i": 345,
+      "text": "So same as before."
+    },
+    {
+      "i": 346,
+      "text": "Alternatively, one coordinate 2²=4, and two coordinates 2²=4."
+    },
+    {
+      "i": 347,
+      "text": "Again, three 4s: sum is 12≠9."
+    },
+    {
+      "i": 348,
+      "text": "Hmm."
+    },
+    {
+      "i": 349,
+      "text": "So, seems like only two distinct types of ordered triples: those with a 9 and two 0s, and those with two 4s and one 1."
+    },
+    {
+      "i": 350,
+      "text": "Therefore, total of 3 + 3 = 6 ordered triples."
+    },
+    {
+      "i": 351,
+      "text": "However, wait a second, perhaps there's a missing case where we have three 2s (each squared to 4)."
+    },
+    {
+      "i": 352,
+      "text": "But sum is 12≠9."
+    },
+    {
+      "i": 353,
+      "text": "So no."
+    },
+    {
+      "i": 354,
+      "text": "Wait, let me think again."
+    },
+    {
+      "i": 355,
+      "text": "Are there any other combinations where a + b + c =9 with a, b, c ∈ {0,1,4,9}?"
+    },
+    {
+      "i": 356,
+      "text": "Let me list all possible combinations:"
+    },
+    {
+      "i": 357,
+      "text": "1."
+    },
+    {
+      "i": 358,
+      "text": "All three numbers are 0,1,4,9, summing to 9."
+    },
+    {
+      "i": 359,
+      "text": "Possible combinations:"
+    },
+    {
+      "i": 360,
+      "text": "- 9,0,0"
+    },
+    {
+      "i": 361,
+      "text": "- 4,4,1"
+    },
+    {
+      "i": 362,
+      "text": "- 4,1,4"
+    },
+    {
+      "i": 363,
+      "text": "- 1,4,4"
+    },
+    {
+      "i": 364,
+      "text": "- 4, 0, 5 → 5 is not a square"
+    },
+    {
+      "i": 365,
+      "text": "- 4, 1, 4 → already considered"
+    },
+    {
+      "i": 366,
+      "text": "- 1,1,7 → 7 not a square"
+    },
+    {
+      "i": 367,
+      "text": "- 1, 4, 4 → considered"
+    },
+    {
+      "i": 368,
+      "text": "- 4, 4,1 → considered"
+    },
+    {
+      "i": 369,
+      "text": "- 0,0,9 → considered"
+    },
+    {
+      "i": 370,
+      "text": "- 0,9,0 → considered"
+    },
+    {
+      "i": 371,
+      "text": "- 0,0,9 → considered"
+    },
+    {
+      "i": 372,
+      "text": "- Any other?"
+    },
+    {
+      "i": 373,
+      "text": "Wait, what about (1, 1, 7)?"
+    },
+    {
+      "i": 374,
+      "text": "7 is not a square."
+    },
+    {
+      "i": 375,
+      "text": "(1, 0, 8): 8 not a square."
+    },
+    {
+      "i": 376,
+      "text": "(0, 0, 9): considered."
+    },
+    {
+      "i": 377,
+      "text": "(0, 4, 5): 5 not a square."
+    },
+    {
+      "i": 378,
+      "text": "(0, 1, 8): same."
+    },
+    {
+      "i": 379,
+      "text": "(4, 0, 5): same."
+    },
+    {
+      "i": 380,
+      "text": "(1, 1, 7): same."
+    },
+    {
+      "i": 381,
+      "text": "So, indeed, the only possible combinations are (9,0,0) and permutations, and (4,4,1) and permutations."
+    },
+    {
+      "i": 382,
+      "text": "Thus, total 3 + 3 =6 ordered triples (a, b, c)."
+    },
+    {
+      "i": 383,
+      "text": "But wait, another thought: perhaps there is a combination with three 3s."
+    },
+    {
+      "i": 384,
+      "text": "But 3 isn't a square, so x=3 would lead to x²=9, but then the sum would be 9 +9 +9=27≠9."
+    },
+    {
+      "i": 385,
+      "text": "So no."
+    },
+    {
+      "i": 386,
+      "text": "Alternatively, maybe two 3s and one 3."
+    },
+    {
+      "i": 387,
+      "text": "Same issue."
+    },
+    {
+      "i": 388,
+      "text": "Therefore, the conclusion is that there are 6 ordered triples (a, b, c) where a, b, c are squares of integers, and a + b + c=9."
+    },
+    {
+      "i": 389,
+      "text": "Now, for each of these ordered triples (a, b, c), we need to compute the number of lattice points (x, y, z) that correspond to them."
+    },
+    {
+      "i": 390,
+      "text": "Remember that for each non-zero coordinate, there are two possible values (positive and negative), while zero has only one."
+    },
+    {
+      "i": 391,
+      "text": "So, let's take each case:"
+    },
+    {
+      "i": 392,
+      "text": "Case 1: (9, 0, 0)"
+    },
+    {
+      "i": 393,
+      "text": "Here, one coordinate is 9, and the other two are 0."
+    },
+    {
+      "i": 394,
+      "text": "So, for example, x²=9, y²=0, z²=0."
+    },
+    {
+      "i": 395,
+      "text": "Therefore, x can be ±3, y=0, z=0."
+    },
+    {
+      "i": 396,
+      "text": "Similarly, if the 9 is in the y or z coordinate."
+    },
+    {
+      "i": 397,
+      "text": "Therefore, for each ordered triple (9,0,0), there are 2 possible points (since the non-zero coordinate can be ±3)."
+    },
+    {
+      "i": 398,
+      "text": "Since there are 3 permutations (9 in x, y, or z), each gives 2 points."
+    },
+    {
+      "i": 399,
+      "text": "So total points for this case: 3 * 2 =6."
+    },
+    {
+      "i": 400,
+      "text": "Case 2: (4,4,1)"
+    },
+    {
+      "i": 401,
+      "text": "Here, two coordinates are 4, and one is 1."
+    },
+    {
+      "i": 402,
+      "text": "For example, x²=4, y²=4, z²=1."
+    },
+    {
+      "i": 403,
+      "text": "Then x can be ±2, y can be ±2, z can be ±1."
+    },
+    {
+      "i": 404,
+      "text": "Each non-zero coordinate has two possibilities."
+    },
+    {
+      "i": 405,
+      "text": "Therefore, the number of points for this ordered triple is 2 (for x) * 2 (for y) * 2 (for z) =8."
+    },
+    {
+      "i": 406,
+      "text": "However, we need to check if this is correct."
+    },
+    {
+      "i": 407,
+      "text": "Wait, in the ordered triple (4,4,1), each of the two 4s and the 1 can be in any permutation."
+    },
+    {
+      "i": 408,
+      "text": "Wait, no."
+    },
+    {
+      "i": 409,
+      "text": "Wait, the ordered triple (4,4,1) is fixed."
+    },
+    {
+      "i": 410,
+      "text": "For example, if the ordered triple is (4,4,1), then x²=4, y²=4, z²=1."
+    },
+    {
+      "i": 411,
+      "text": "Therefore, the number of points is 2*2*2=8."
+    },
+    {
+      "i": 412,
+      "text": "Similarly, for the ordered triple (4,1,4), which would correspond to x²=4, y²=1, z²=4, the number of points is also 8."
+    },
+    {
+      "i": 413,
+      "text": "Same for (1,4,4)."
+    },
+    {
+      "i": 414,
+      "text": "Since there are three such ordered triples, each contributing 8 points, the total for this case is 3 *8=24."
+    },
+    {
+      "i": 415,
+      "text": "But wait, let's verify."
+    },
+    {
+      "i": 416,
+      "text": "For example, take the ordered triple (4,4,1)."
+    },
+    {
+      "i": 417,
+      "text": "The corresponding coordinates are x=±2, y=±2, z=±1."
+    },
+    {
+      "i": 418,
+      "text": "Each combination of signs gives a different point."
+    },
+    {
+      "i": 419,
+      "text": "There are 2 choices for x, 2 for y, 2 for z: total 8 points."
+    },
+    {
+      "i": 420,
+      "text": "Similarly for the other permutations."
+    },
+    {
+      "i": 421,
+      "text": "So yes, 3 ordered triples *8 points each=24."
+    },
+    {
+      "i": 422,
+      "text": "Therefore, total number of lattice points is 6 (from first case) +24 (from second case)=30."
+    },
+    {
+      "i": 423,
+      "text": "But wait, is that all?"
+    },
+    {
+      "i": 424,
+      "text": "Let me check if there are any other ordered triples (a, b, c) that I missed."
+    },
+    {
+      "i": 425,
+      "text": "Earlier, we concluded there are only 6 ordered triples (3 with a 9 and two 0s, 3 with two 4s and one 1), leading to 6 +24=30 points."
+    },
+    {
+      "i": 426,
+      "text": "But let me check again."
+    },
+    {
+      "i": 427,
+      "text": "Wait, another thought: is there a case where all three coordinates are non-zero, and none of them is 4 or 9?"
+    },
+    {
+      "i": 428,
+      "text": "For example, three 3s."
+    },
+    {
+      "i": 429,
+      "text": "But 3 isn't a square."
+    },
+    {
+      "i": 430,
+      "text": "Or two 2s and one 1: 2²+2²+1²=4+4+1=9."
+    },
+    {
+      "i": 431,
+      "text": "Wait, but 2²=4."
+    },
+    {
+      "i": 432,
+      "text": "So that's two 4s and one 1, which is the same as the second case."
+    },
+    {
+      "i": 433,
+      "text": "So already considered."
+    },
+    {
+      "i": 434,
+      "text": "Alternatively, 1²+2²+2²=1+4+4=9."
+    },
+    {
+      "i": 435,
+      "text": "Same as above."
+    },
+    {
+      "i": 436,
+      "text": "Therefore, yes, that case is already included in the two 4s and one 1."
+    },
+    {
+      "i": 437,
+      "text": "Therefore, no other possibilities."
+    },
+    {
+      "i": 438,
+      "text": "Therefore, total number of lattice points is 6 +24=30."
+    },
+    {
+      "i": 439,
+      "text": "But let me check with an example."
+    },
+    {
+      "i": 440,
+      "text": "For instance, take the point (2,2,1)."
+    },
+    {
+      "i": 441,
+      "text": "The distance is √(4+4+1)=√9=3."
+    },
+    {
+      "i": 442,
+      "text": "Yes."
+    },
+    {
+      "i": 443,
+      "text": "Similarly, (3,0,0) also has distance 3."
+    },
+    {
+      "i": 444,
+      "text": "So these points are valid."
+    },
+    {
+      "i": 445,
+      "text": "But wait, are there any other points?"
+    },
+    {
+      "i": 446,
+      "text": "Let me think."
+    },
+    {
+      "i": 447,
+      "text": "For example, (2,1,2)."
+    },
+    {
+      "i": 448,
+      "text": "Yes, that's included in the permutations."
+    },
+    {
+      "i": 449,
+      "text": "Similarly, (1,2,2)."
+    },
+    {
+      "i": 450,
+      "text": "All such permutations are counted in the 24."
+    },
+    {
+      "i": 451,
+      "text": "But what about points like (2, -2, 1)?"
+    },
+    {
+      "i": 452,
+      "text": "Yes, that's included in the 8 points per permutation."
+    },
+    {
+      "i": 453,
+      "text": "Negative coordinates are allowed, as long as they are integers, which they are."
+    },
+    {
+      "i": 454,
+      "text": "So each non-zero coordinate can be positive or negative, hence the multiplication by 2 for each non-zero coordinate."
+    },
+    {
+      "i": 455,
+      "text": "Therefore, each of the ordered triples (4,4,1) gives 8 points, and there are three such ordered triples, so 24 points."
+    },
+    {
+      "i": 456,
+      "text": "The ordered triples (9,0,0) give 2 points each (positive and negative 3 in one coordinate), and there are three coordinates, so 6 points."
+    },
+    {
+      "i": 457,
+      "text": "Therefore, total points:24 +6=30."
+    },
+    {
+      "i": 458,
+      "text": "Therefore, the answer should be 30."
+    },
+    {
+      "i": 459,
+      "text": "But wait, let me check another angle."
+    },
+    {
+      "i": 460,
+      "text": "The equation x² + y² + z²=9."
+    },
+    {
+      "i": 461,
+      "text": "How many integer solutions does this equation have?"
+    },
+    {
+      "i": 462,
+      "text": "Alternatively, perhaps use generating functions or other combinatorial methods, but given the small number, maybe it's manageable."
+    },
+    {
+      "i": 463,
+      "text": "But given that I already reasoned through the cases and arrived at 30, but let me verify with another approach."
+    },
+    {
+      "i": 464,
+      "text": "Alternative approach:"
+    },
+    {
+      "i": 465,
+      "text": "We can think of the problem as finding the number of integer solutions to x² + y² + z²=9."
+    },
+    {
+      "i": 466,
+      "text": "Each solution corresponds to a lattice point at distance 3 from the origin."
+    },
+    {
+      "i": 467,
+      "text": "Let's list all possible values for x, y, z."
+    },
+    {
+      "i": 468,
+      "text": "Possible squares that add up to 9."
+    },
+    {
+      "i": 469,
+      "text": "Each coordinate can be -3, -2, -1, 0, 1, 2, 3."
+    },
+    {
+      "i": 470,
+      "text": "Let's consider the possible values for each coordinate."
+    },
+    {
+      "i": 471,
+      "text": "For x:"
+    },
+    {
+      "i": 472,
+      "text": "If x=±3, then y and z must be 0."
+    },
+    {
+      "i": 473,
+      "text": "If x=±2, then y² + z²=9 -4=5."
+    },
+    {
+      "i": 474,
+      "text": "The possible integer solutions for y² + z²=5 are y=±1, z=±2 or y=±2, z=±1."
+    },
+    {
+      "i": 475,
+      "text": "Similarly, if x=±1, then y² + z²=8."
+    },
+    {
+      "i": 476,
+      "text": "The integer solutions for y² + z²=8 are y=±2, z=±2."
+    },
+    {
+      "i": 477,
+      "text": "If x=0, then y² + z²=9."
+    },
+    {
+      "i": 478,
+      "text": "The integer solutions are y=±3, z=0 or y=0, z=±3 or y=±0, z=±3."
+    },
+    {
+      "i": 479,
+      "text": "Wait, no."
+    },
+    {
+      "i": 480,
+      "text": "If x=0, then y and z can be permutations of (±3,0) and (±0, ±3), but also other combinations."
+    },
+    {
+      "i": 481,
+      "text": "Wait, for y² + z²=9, the solutions are y=0, z=±3; y=±3, z=0; and y=±something else?"
+    },
+    {
+      "i": 482,
+      "text": "Wait, 9 can be written as 0 +9, 9 +0, or 1 +8, 4 +5."
+    },
+    {
+      "i": 483,
+      "text": "But 8 and 5 aren't squares."
+    },
+    {
+      "i": 484,
+      "text": "So the only solutions are permutations of (±3,0)."
+    },
+    {
+      "i": 485,
+      "text": "So for y² + z²=9, solutions are y=±3, z=0; y=0, z=±3."
+    },
+    {
+      "i": 486,
+      "text": "Each of these has two possibilities for the non-zero coordinate (positive and negative)."
+    },
+    {
+      "i": 487,
+      "text": "So total of 6 solutions."
+    },
+    {
+      "i": 488,
+      "text": "Wait, let's check this:"
+    },
+    {
+      "i": 489,
+      "text": "If x=0, then y² + z²=9."
+    },
+    {
+      "i": 490,
+      "text": "The integer solutions are:"
+    },
+    {
+      "i": 491,
+      "text": "(±3, 0, 0), (0, ±3, 0), (0, 0, ±3)."
+    },
+    {
+      "i": 492,
+      "text": "Wait, no, wait."
+    },
+    {
+      "i": 493,
+      "text": "If x=0, then we're in the case where x=0, but y and z can be anything."
+    },
+    {
+      "i": 494,
+      "text": "Wait, no."
+    },
+    {
+      "i": 495,
+      "text": "If x=0, then the original equation reduces to y² + z²=9."
+    },
+    {
+      "i": 496,
+      "text": "The solutions to this are all pairs (y,z) such that y and z are integers with y² + z²=9."
+    },
+    {
+      "i": 497,
+      "text": "The solutions are:"
+    },
+    {
+      "i": 498,
+      "text": "y=0, z=±3"
+    },
+    {
+      "i": 499,
+      "text": "y=±3, z=0"
+    },
+    {
+      "i": 500,
+      "text": "y=±1, z=±√8 (but √8 is not integer)"
+    },
+    {
+      "i": 501,
+      "text": "y=±2, z=±√5 (not integer)"
+    },
+    {
+      "i": 502,
+      "text": "So only the cases where one of y or z is ±3 and the other is 0."
+    },
+    {
+      "i": 503,
+      "text": "So there are 4 solutions when x=0: (0,3,0), (0,-3,0), (0,0,3), (0,0,-3)."
+    },
+    {
+      "i": 504,
+      "text": "Wait, but actually, (0,3,0) and (0,-3,0) are two solutions for y, and (0,0,3) and (0,0,-3) are two solutions for z."
+    },
+    {
+      "i": 505,
+      "text": "So total 4 solutions when x=0."
+    },
+    {
+      "i": 506,
+      "text": "Similarly, when x=±3, we have y=0, z=0, so two solutions per x (positive and negative), so total 2 solutions."
+    },
+    {
+      "i": 507,
+      "text": "Similarly for y and z."
+    },
+    {
+      "i": 508,
+      "text": "But wait, no."
+    },
+    {
+      "i": 509,
+      "text": "If x=3, then y=0, z=0."
+    },
+    {
+      "i": 510,
+      "text": "So (3,0,0) and (-3,0,0)."
+    },
+    {
+      "i": 511,
+      "text": "Similarly for y and z."
+    },
+    {
+      "i": 512,
+      "text": "So total 6 solutions where one coordinate is ±3 and the others are 0."
+    },
+    {
+      "i": 513,
+      "text": "Then, when x=±2, then y² + z²=5."
+    },
+    {
+      "i": 514,
+      "text": "The solutions to y² + z²=5 are:"
+    },
+    {
+      "i": 515,
+      "text": "y=±1, z=±2"
+    },
+    {
+      "i": 516,
+      "text": "y=±2, z=±1"
+    },
+    {
+      "i": 517,
+      "text": "Each of these has four combinations for each pair (y,z), considering signs."
+    },
+    {
+      "i": 518,
+      "text": "For each x=±2, we can have y=±1, z=±2 or y=±2, z=±1."
+    },
+    {
+      "i": 519,
+      "text": "For each x=±2, there are 8 solutions: 2 choices for y sign, 2 for z sign, and 2 arrangements (y=1,z=2 or y=2,z=1)."
+    },
+    {
+      "i": 520,
+      "text": "So for each x=±2, 8 solutions."
+    },
+    {
+      "i": 521,
+      "text": "But since x can be ±2, that's 2 *8=16 solutions for x=±2."
+    },
+    {
+      "i": 522,
+      "text": "Similarly, when x=±1, y² + z²=8."
+    },
+    {
+      "i": 523,
+      "text": "The integer solutions to y² + z²=8 are y=±2, z=±2."
+    },
+    {
+      "i": 524,
+      "text": "So for each x=±1, the solutions are y=±2, z=±2."
+    },
+    {
+      "i": 525,
+      "text": "There are 2 choices for y sign, 2 for z sign."
+    },
+    {
+      "i": 526,
+      "text": "So 4 solutions per x=±1."
+    },
+    {
+      "i": 527,
+      "text": "Since x can be ±1, that's 2 *4=8 solutions."
+    },
+    {
+      "i": 528,
+      "text": "Therefore, summing up all cases:"
+    },
+    {
+      "i": 529,
+      "text": "- x=±3: 2 points each for x, total 6 points."
+    },
+    {
+      "i": 530,
+      "text": "- x=±2: 16 points."
+    },
+    {
+      "i": 531,
+      "text": "- x=±1:8 points."
+    },
+    {
+      "i": 532,
+      "text": "- x=0:4 points."
+    },
+    {
+      "i": 533,
+      "text": "Wait, wait, this seems conflicting with the previous count."
+    },
+    {
+      "i": 534,
+      "text": "Let me re-express:"
+    },
+    {
+      "i": 535,
+      "text": "Wait, if we consider x=0, then the equation becomes y² + z²=9, which has 12 solutions?"
+    },
+    {
+      "i": 536,
+      "text": "Wait, no."
+    },
+    {
+      "i": 537,
+      "text": "Wait, when x=0, y and z can be (±3,0), (0,±3)."
+    },
+    {
+      "i": 538,
+      "text": "Each of these has two possibilities for the non-zero coordinate."
+    },
+    {
+      "i": 539,
+      "text": "So for (y,z):"
+    },
+    {
+      "i": 540,
+      "text": "(3,0), (-3,0), (0,3), (0,-3)."
+    },
+    {
+      "i": 541,
+      "text": "That's 4 solutions."
+    },
+    {
+      "i": 542,
+      "text": "So when x=0, we have 4 points: (0,3,0), (0,-3,0), (0,0,3), (0,0,-3)."
+    },
+    {
+      "i": 543,
+      "text": "Therefore, total 4 solutions when x=0."
+    },
+    {
+      "i": 544,
+      "text": "But earlier, when x=±3, we have (3,0,0) and (-3,0,0), which is 2 solutions."
+    },
+    {
+      "i": 545,
+      "text": "Similarly, for y=±3 and z=±3, we have the other coordinates."
+    },
+    {
+      "i": 546,
+      "text": "But in total, the points where one coordinate is ±3 and the others are 0 are 6 points: (3,0,0), (-3,0,0), (0,3,0), (0,-3,0), (0,0,3), (0,0,-3)."
+    },
+    {
+      "i": 547,
+      "text": "So that's 6 points."
+    },
+    {
+      "i": 548,
+      "text": "Then, for x=±2: for each x=2 and x=-2, the equation y² + z²=5 has solutions (y,z)=(±1,±2) and (±2,±1)."
+    },
+    {
+      "i": 549,
+      "text": "Each of these has 8 possibilities (2 signs for y, 2 signs for z, 2 permutations)."
+    },
+    {
+      "i": 550,
+      "text": "So for x=2: 8 points, for x=-2: another 8 points."
+    },
+    {
+      "i": 551,
+      "text": "Total 16 points."
+    },
+    {
+      "i": 552,
+      "text": "Similarly, for x=±1: y² + z²=8."
+    },
+    {
+      "i": 553,
+      "text": "The solutions are y=±2, z=±2."
+    },
+    {
+      "i": 554,
+      "text": "So for each x=1: y=±2, z=±2, which is 4 points."
+    },
+    {
+      "i": 555,
+      "text": "Similarly for x=-1: 4 points."
+    },
+    {
+      "i": 556,
+      "text": "Total 8 points."
+    },
+    {
+      "i": 557,
+      "text": "Additionally, when x=0, y² + z²=9 has 4 points: (0,3,0), (0,-3,0), (0,0,3), (0,0,-3)."
+    },
+    {
+      "i": 558,
+      "text": "Wait, but earlier I thought there are 4 points when x=0, but actually, when x=0, the solutions are:"
+    },
+    {
+      "i": 559,
+      "text": "(0, 3, 0)"
+    },
+    {
+      "i": 560,
+      "text": "(0, -3, 0)"
+    },
+    {
+      "i": 561,
+      "text": "(0, 0, 3)"
+    },
+    {
+      "i": 562,
+      "text": "(0, 0, -3)"
+    },
+    {
+      "i": 563,
+      "text": "So 4 points."
+    },
+    {
+      "i": 564,
+      "text": "But we already counted the six points where one coordinate is ±3 and the others zero."
+    },
+    {
+      "i": 565,
+      "text": "Wait, no."
+    },
+    {
+      "i": 566,
+      "text": "The six points where one coordinate is ±3 and the others zero are:"
+    },
+    {
+      "i": 567,
+      "text": "(±3,0,0), (0,±3,0), (0,0,±3)."
+    },
+    {
+      "i": 568,
+      "text": "That's 6 points."
+    },
+    {
+      "i": 569,
+      "text": "But when x=0, the equation y² + z²=9 includes points like (0,3,0) and (0,-3,0), which are part of the six points."
+    },
+    {
+      "i": 570,
+      "text": "The other two points when x=0 are (0,0,3) and (0,0,-3)."
+    },
+    {
+      "i": 571,
+      "text": "Wait, but those are part of the six points as well."
+    },
+    {
+      "i": 572,
+      "text": "So in reality, when x=0, the four points are part of the six points where one coordinate is ±3 and the others are zero."
+    },
+    {
+      "i": 573,
+      "text": "Therefore, the six points are all accounted for in the case where one coordinate is ±3."
+    },
+    {
+      "i": 574,
+      "text": "Therefore, when x=0, the four points are part of those six."
+    },
+    {
+      "i": 575,
+      "text": "So the total count should be:"
+    },
+    {
+      "i": 576,
+      "text": "- 6 points where one coordinate is ±3."
+    },
+    {
+      "i": 577,
+      "text": "- 16 points where x=±2 and y,z are non-zero."
+    },
+    {
+      "i": 578,
+      "text": "- 8 points where x=±1 and y,z are non-zero."
+    },
+    {
+      "i": 579,
+      "text": "But wait, but when x=0, we have the points where y or z is ±3, but those are already counted in the six points."
+    },
+    {
+      "i": 580,
+      "text": "So total points:6 +16 +8=30."
+    },
+    {
+      "i": 581,
+      "text": "Which matches our previous calculation."
+    },
+    {
+      "i": 582,
+      "text": "Therefore, the total number of lattice points at distance 3 from the origin is 30."
+    },
+    {
+      "i": 583,
+      "text": "Therefore, the answer is 30."
+    },
+    {
+      "i": 584,
+      "text": "**Final Answer**\nThe number of lattice points is \\boxed{30}."
+    }
+  ],
+  "solution": "To find the number of lattice points in three-dimensional space that are exactly 3 units away from the origin, we need to solve the equation \\(x^2 + y^2 + z^2 = 9\\) where \\(x\\), \\(y\\), and \\(z\\) are integers. \n\n### Key Steps:\n\n1. **Identify Possible Values**:\n   - The coordinates \\(x\\), \\(y\\), and \\(z\\) can be integers such that their squares sum to 9.\n   - The possible values for each coordinate are \\(-3, -2, -1, 0, 1, 2, 3\\).\n\n2. **Case Analysis**:\n   - **Case 1: One coordinate is \\(\\pm 3\\), others are 0**:\n     - This gives the points \\((\\pm 3, 0, 0)\\), \\((0, \\pm 3, 0)\\), and \\((0, 0, \\pm 3)\\).\n     - Total: \\(6\\) points.\n\n   - **Case 2: One coordinate is \\(\\pm 2\\), and the sum of the squares of the other two coordinates is 5**:\n     - The pairs \\((y, z)\\) that satisfy \\(y^2 + z^2 = 5\\) are \\((\\pm 1, \\pm 2)\\) and \\((\\pm 2, \\pm 1)\\).\n     - For each \\(x = \\pm 2\\), there are 8 combinations (considering signs and permutations).\n     - Total: \\(2 \\text{ (values for } x) \\times 8 \\text{ (combinations)} = 16\\) points.\n\n   - **Case 3: One coordinate is \\(\\pm 1\\), and the sum of the squares of the other two coordinates is 8**:\n     - The pairs \\((y, z)\\) that satisfy \\(y^2 + z^2 = 8\\) are \\((\\pm 2, \\pm 2)\\).\n     - For each \\(x = \\pm 1\\), there are 4 combinations (considering signs).\n     - Total: \\(2 \\text{ (values for } x) \\times 4 \\text{ (combinations)} = 8\\) points.\n\n3. **Summarize All Cases**:\n   - Points from Case 1: \\(6\\)\n   - Points from Case 2: \\(16\\)\n   - Points from Case 3: \\(8\\)\n\n### Final Calculation:\n\\[\n6 + 16 + 8 = 30\n\\]\n\nThus, the number of lattice points that have a distance of 3 from the origin is \\(\\boxed{30}\\)."
+}

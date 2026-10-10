@@ -31,6 +31,13 @@ per split do not depend on it):
     complete model answer could be scored wrong.
 --no-answer-dir '' keeps everything in --output-dir.
 
+Manual inspection. --inspect-count (10) questions are drawn at random (seeded) from the
+training questions of --output-dir and moved to --inspect-dir, so they are never trained
+on: tasks.jsonl holds them in the task format above, and trajectories/<id>.json a copy of
+each upstream trajectory.json (question, DeepSeek-R1 reasoning, solution) to read. They
+come from the training split only, so the validation set stays as it is.
+--inspect-dir '' keeps them in training.
+
 Format check. Every trajectory.json must be a JSON object with a string id, question and
 solution and a non-empty question; a file that fails is reported and skipped, or stops
 the run with --strict. An id that does not match its directory name only produces a
@@ -43,6 +50,7 @@ Usage (from the repository root):
     python3 GRPO/src/prepare_rest_grpo.py --strict
     python3 GRPO/src/prepare_rest_grpo.py --check-only
     python3 GRPO/src/prepare_rest_grpo.py --no-answer-dir ''   # keep unanswerable questions
+    python3 GRPO/src/prepare_rest_grpo.py --inspect-dir ''     # hold out nothing for inspection
 """
 
 from __future__ import annotations
@@ -50,12 +58,13 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import shutil
 import sys
 from collections import Counter
 from pathlib import Path
 
 from labelcot.reward import answer_is_checkable
-from prepare_grpo_try import _type_errors, check_outputs, extract_boxed, report
+from prepare_grpo_try import _type_errors, check_jsonl, check_outputs, extract_boxed, report
 
 SOURCE_FIELDS = {"id": str, "question": str, "solution": str}
 
@@ -70,6 +79,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--output-dir", default="GRPO/data/rest_grpo")
     p.add_argument("--no-answer-dir", default="no_answer",
                    help="where questions without a checkable answer go; empty: keep them in --output-dir")
+    p.add_argument("--inspect-dir", default="manual_inspection",
+                   help="where the questions held out for manual inspection go; empty: none")
+    p.add_argument("--inspect-count", type=int, default=10)
     p.add_argument("--data-source", default="rest_grpo")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--strict", action="store_true",
@@ -159,6 +171,35 @@ def overlap_errors(dirs: list[Path]) -> list[str]:
     return errors
 
 
+def write_inspection(inspect_dir: Path, tasks: list[dict], source: Path) -> None:
+    """tasks.jsonl plus a copy of each upstream trajectory.json under trajectories/."""
+    trajectories = inspect_dir / "trajectories"
+    if trajectories.is_dir():  # drop copies left from an earlier draw
+        shutil.rmtree(trajectories)
+    trajectories.mkdir(parents=True)
+    with (inspect_dir / "tasks.jsonl").open("w", encoding="utf-8") as f:
+        for task in tasks:
+            f.write(json.dumps(task, ensure_ascii=False) + "\n")
+            shutil.copyfile(source / task["id"] / "environment" / "trajectory.json", trajectories / f"{task['id']}.json")
+
+
+def inspection_errors(inspect_dir: Path, dirs: list[Path]) -> list[str]:
+    """Format errors in tasks.jsonl, missing trajectory copies, and held-out ids still in dirs."""
+    tasks, errors = check_jsonl(inspect_dir / "tasks.jsonl")
+    for task in tasks:
+        if not (inspect_dir / "trajectories" / f"{task['id']}.json").is_file():
+            errors.append(f"{inspect_dir}/trajectories/{task['id']}.json: missing")
+    held_out = {t["id"] for t in tasks}
+    for d in dirs:
+        for name in ("train", "validation"):
+            path = d / f"{name}.jsonl"
+            if path.is_file():
+                with path.open(encoding="utf-8") as f:
+                    for task_id in held_out & {json.loads(line)["id"] for line in f if line.strip()}:
+                        errors.append(f"id {task_id} is held out in {inspect_dir}/ but also in {path}")
+    return errors
+
+
 def build_task(record: dict, sample_id: str, data_source: str) -> dict:
     question = record["question"].strip()
     return {
@@ -185,6 +226,10 @@ def main() -> None:
             print(f"format check  : {d}/ {status} "
                   f"({counts['train']} train / {counts['validation']} validation tasks valid)")
         errors.extend(overlap_errors(out_dirs))
+        if args.inspect_dir:
+            inspect_errors = inspection_errors(Path(args.inspect_dir), out_dirs)
+            errors.extend(inspect_errors)
+            print(f"format check  : {args.inspect_dir}/ {'OK' if not inspect_errors else 'error(s)'}")
         report("error", errors)
         raise SystemExit(1 if errors else 0)
 
@@ -242,6 +287,15 @@ def main() -> None:
             keep = not args.no_answer_dir or answer_kind(task, several) == "checkable"
             outputs[out_dir if keep else out_dirs[1]][name].append(task)
 
+    # Hold out a few training questions for manual inspection.
+    inspect = []
+    if args.inspect_dir and args.inspect_count > 0:
+        pool = outputs[out_dir]["train"]
+        picked = set(random.Random(args.seed).sample(sorted(t["id"] for t in pool), min(args.inspect_count, len(pool))))
+        inspect = [t for t in pool if t["id"] in picked]
+        outputs[out_dir]["train"] = [t for t in pool if t["id"] not in picked]
+        write_inspection(Path(args.inspect_dir), inspect, source)
+
     for d, files in outputs.items():
         d.mkdir(parents=True, exist_ok=True)
         for name, split in files.items():
@@ -255,6 +309,8 @@ def main() -> None:
         # An empty no-answer set is fine; only the main set must have training tasks.
         output_errors.extend(e for e in check_outputs(d)[1] if d == out_dir or not e.endswith(": no tasks"))
     output_errors.extend(overlap_errors(out_dirs))
+    if inspect:
+        output_errors.extend(inspection_errors(Path(args.inspect_dir), out_dirs))
     if output_errors:
         report("error", output_errors)
         raise SystemExit("the written files failed the format check")
@@ -269,6 +325,9 @@ def main() -> None:
         print(f"{str(d) + '/':30s}: {len(files['train'])} train / {len(files['validation'])} validation")
         for name in files:
             print(f"  {name:10s}: " + ", ".join(f"{kinds[name][k]} {k}" for k in ANSWER_KINDS if kinds[name][k]))
+    if inspect:
+        print(f"{args.inspect_dir + '/':30s}: {len(inspect)} training questions held out: "
+              + ", ".join(t["id"] for t in inspect))
 
 
 if __name__ == "__main__":

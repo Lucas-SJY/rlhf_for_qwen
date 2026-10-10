@@ -31,7 +31,9 @@ def write_source(root: Path, sample_id: str, question: str, solution: str) -> No
 
 def run_main(argv: list[str]) -> str:
     stdout = io.StringIO()
-    with mock.patch.object(sys, "argv", ["prepare_rest_grpo.py", *argv]), contextlib.redirect_stdout(stdout), \
+    # Nothing is held out for inspection unless a test asks for it (later arguments win).
+    argv = ["prepare_rest_grpo.py", "--inspect-dir", "", *argv]
+    with mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(stdout), \
             contextlib.redirect_stderr(io.StringIO()):
         main()
     return stdout.getvalue()
@@ -91,6 +93,33 @@ class BuildTest(unittest.TestCase):
             # Separating them does not change which split a question is in.
             for name in ("train", "validation"):
                 self.assertEqual({t["id"] for t in kept[name] + moved[name]}, together[name])
+
+    def test_inspection_questions_are_drawn_from_train_and_never_trained_on(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for i in range(20):
+                write_source(root / "src", f"sample_{i:06d}", f"{MATH_Q} ({i})", f"$\\boxed{{{i}}}$")
+            argv = ["--source-dir", str(root / "src"), "--exclude-from", "", "--no-answer-dir", str(root / "na")]
+
+            run_main(argv + ["--output-dir", str(root / "all")])
+            before = read_tasks(root / "all")
+            drawn = []
+            for _ in range(2):
+                run_main(argv + ["--output-dir", str(root / "out"), "--inspect-dir", str(root / "insp"),
+                                 "--inspect-count", "3"])
+                drawn.append([json.loads(line) for line in (root / "insp" / "tasks.jsonl").read_text().splitlines()])
+            after = read_tasks(root / "out")
+
+            held = {t["id"]: t for t in drawn[0]}
+            self.assertEqual(len(held), 3)
+            self.assertEqual(drawn[0], drawn[1])  # seeded
+            self.assertEqual(after["validation"], before["validation"])
+            self.assertEqual({t["id"] for t in after["train"]}, {t["id"] for t in before["train"]} - set(held))
+            self.assertTrue(all(t in before["train"] for t in held.values()))
+            for task_id in held:
+                copy = json.loads((root / "insp" / "trajectories" / f"{task_id}.json").read_text())
+                self.assertEqual(copy["id"], task_id)
+            self.assertEqual(sorted(p.stem for p in (root / "insp" / "trajectories").glob("*.json")), sorted(held))
 
     def test_split_is_seeded_and_ten_percent(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -81,6 +81,7 @@ All settings live in `.env` (template: `.env.example`).
 | `TOTAL_TRAINING_STEPS`, `EPOCHS` | 200, 1 | step cap; -1 = full epochs (630 steps) |
 | `SAVE_FREQ`, `TEST_FREQ`, `VAL_BEFORE_TRAIN` | 20, 20, true | a final checkpoint and a final validation always happen |
 | `ROLLOUT_GPU_MEM_UTIL` | 0.7 | vLLM's share of the GPU while generating |
+| `PPO_MAX_TOKEN_LEN` | prompt + response + 2048 (12,288) | tokens per micro-batch in the update and the log-prob passes. Under CPU offload each micro-batch pays a fixed ~40 s to stream weights in and gradients out (measured ~46 s per 12k micro-batch on one A100), so 32,768 (~60 GB peak on an 80 GB card, logits dominate) cuts the update time to about a third |
 | `RUN_NAME`, `OUTPUT_ROOT` | `qwen3-8b-grpo-labels-v1`, `/grpo/runs` | |
 | `SMOKE_TEST` | false | true: 3 tiny steps; overrides the size settings above |
 | `REPORT_TO`, `WANDB_API_KEY`, `WANDB_PROJECT` | `wandb`, empty, `context-comp-grpo` | as in `../train`: `REPORT_TO=wandb` streams all metrics to wandb.ai and needs `WANDB_API_KEY` (or `WANDB_MODE=offline`); empty `REPORT_TO` = console only |
@@ -199,9 +200,15 @@ python3 GRPO/src/prepare_rest_grpo.py --no-answer-dir ''  # keep every question 
   which have no answer, plus 807 prose or proof answers (567 science, 240 math, e.g.
   `\text{No}`), plus 52 questions whose solution boxes several distinct values (several
   roots, multi-part questions), for which the last `\boxed{}` kept as the answer is
-  incomplete. `GRPO/data/rest_grpo/` keeps **4,786 train / 526 validation** questions:
-  5,065 math and 247 science with one short, checkable answer. `no_answer/` holds 5,623 /
-  631. The distribution before the separation is in `data_distrib.md`.
+  incomplete. That leaves 4,786 train / 526 validation questions (5,065 math and 247
+  science) with one short, checkable answer. `no_answer/` holds 5,623 / 631. The
+  distribution before the separation is in `data_distrib.md`.
+- **Held out for manual inspection.** 10 of those training questions, drawn at random
+  (seeded), are moved to `manual_inspection/` at the repository root and never trained
+  on: `tasks.jsonl` in the task format, and `trajectories/<id>.json`, a copy of each
+  upstream trajectory (question, DeepSeek-R1 reasoning, solution). The validation set is
+  untouched. `GRPO/data/rest_grpo/` therefore has **4,776 train / 526 validation**
+  questions (`--inspect-count` changes the number, `--inspect-dir ''` holds out none).
 - **Format check.** As for grpo_try: malformed source files are reported and skipped
   (`--strict`: the run stops), and the written files are read back and checked.
 

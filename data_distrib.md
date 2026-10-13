@@ -14,7 +14,7 @@ answer. The image bakes in `GRPO/data/`, so a changed task set needs `./run.sh i
 | grpo_try | `GRPO/data/grpo_try/` | 6 | 3 | `GRPO/src/prepare_grpo_try.py` | 9 hand-picked questions, for pipeline tests |
 | **rest_grpo** | `GRPO/data/rest_grpo/` | **4,776** | **526** | `GRPO/src/prepare_rest_grpo.py` | Bespoke-Stratos questions not used in SFT, one checkable answer each; **used by the current runs** |
 | no_answer | `no_answer/` | 5,623 | 631 | `GRPO/src/prepare_rest_grpo.py` | split off from rest_grpo: no checkable answer; not trained on (gitignored) |
-| manual_inspection | `manual_inspection/` | 10 | – | `GRPO/src/prepare_rest_grpo.py` | held out from rest_grpo training for reading; never trained on |
+| manual_inspection | `manual_inspection/` | 10 | – | `GRPO/src/prepare_rest_grpo.py` | held out from rest_grpo training for reading; never trained on (gitignored) |
 
 ## rest_grpo
 

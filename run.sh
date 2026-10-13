@@ -12,7 +12,10 @@
 #   ./run.sh logs         follow the training Job's logs
 #   ./run.sh status       jobs, pods and recent events
 #   ./run.sh export       convert the latest checkpoint to a HF model (CPU Job) and follow it
-#   ./run.sh clean        delete the training and export Jobs (Secrets and PVCs are kept)
+#   ./run.sh answer       answer ANSWER_TASKS with that export and the SFT model (GPU Job),
+#                         then copy the scored answers to ./answers/<RUN_NAME>/
+#   ./run.sh fetch-answers  only that copy
+#   ./run.sh clean        delete the training, export and answer Jobs (Secrets and PVCs are kept)
 #
 # Everything is configured through .env next to this file; see .env.example.
 set -euo pipefail
@@ -32,6 +35,9 @@ if [ -f .env ]; then
 fi
 
 JOB_NAME="${JOB_NAME:-qwen-grpo}"
+RUN_NAME="${RUN_NAME:-qwen3-8b-grpo-labels-v1}"
+# Questions that ./run.sh answer has both models answer (the held-out inspection set).
+ANSWER_TASKS="${ANSWER_TASKS:-manual_inspection/tasks.jsonl}"
 SFT_PVC_NAME="${SFT_PVC_NAME:-qwen-sft-data}"
 RL_PVC_NAME="${RL_PVC_NAME:-qwen-grpo-data}"
 # Training pod size; the defaults fit the 8B LoRA run on one GPU.
@@ -198,9 +204,68 @@ follow_job() {
   "${KUBECTL[@]}" logs -f "${pod}"
 }
 
+step_answer() {
+  if [ ! -f "${ANSWER_TASKS}" ]; then
+    echo "error: ${ANSWER_TASKS} not found (set ANSWER_TASKS in .env)" >&2
+    exit 1
+  fi
+  log "Refreshing ConfigMap ${JOB_NAME}-answer-tasks from ${ANSWER_TASKS}"
+  "${KUBECTL[@]}" delete configmap "${JOB_NAME}-answer-tasks" --ignore-not-found
+  "${KUBECTL[@]}" create configmap "${JOB_NAME}-answer-tasks" --from-file=tasks.jsonl="${ANSWER_TASKS}"
+  log "Submitting Job ${JOB_NAME}-answer"
+  "${KUBECTL[@]}" delete job "${JOB_NAME}-answer" --ignore-not-found
+  render "${APP_DIR}/k8s/answer-job.yaml" | "${KUBECTL[@]}" apply -f -
+  follow_job "${JOB_NAME}-answer"
+  local pod phase
+  pod="$(job_pod "${JOB_NAME}-answer")"
+  phase="$("${KUBECTL[@]}" get pod "${pod}" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  if [ "${phase}" != "Succeeded" ]; then
+    echo "error: the answer Job ended ${phase:-without a pod}; see its log above" >&2
+    exit 1
+  fi
+  step_fetch_answers
+}
+
+# The answers sit on the RL PVC; a throwaway busybox pod mounts it so kubectl cp can
+# read them. The PVC is ReadWriteOnce, so no other pod may hold it on another node.
+step_fetch_answers() {
+  local pod="${JOB_NAME}-fetch" dest="answers/${RUN_NAME}"
+  log "Copying /grpo/answers/${RUN_NAME} from PVC ${RL_PVC_NAME} to ./${dest}"
+  "${KUBECTL[@]}" delete pod "${pod}" --ignore-not-found >/dev/null
+  "${KUBECTL[@]}" apply -f - >/dev/null <<POD
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ${pod}
+spec:
+  restartPolicy: Never
+  containers:
+    - name: fetch
+      image: busybox:1.36
+      command: ["sleep", "900"]
+      resources:
+        requests: {cpu: 100m, memory: 128Mi}
+        limits: {cpu: 100m, memory: 128Mi}
+      volumeMounts:
+        - {name: rl, mountPath: /grpo, readOnly: true}
+  volumes:
+    - name: rl
+      persistentVolumeClaim: {claimName: ${RL_PVC_NAME}}
+POD
+  "${KUBECTL[@]}" wait --for=condition=Ready "pod/${pod}" --timeout=600s
+  # Copy next to the destination first, so a failed copy leaves the old answers alone.
+  rm -rf "${dest}.tmp"
+  mkdir -p "$(dirname "${dest}")"
+  "${KUBECTL[@]}" cp "${pod}:/grpo/answers/${RUN_NAME}" "${dest}.tmp"
+  rm -rf "${dest}"
+  mv "${dest}.tmp" "${dest}"
+  "${KUBECTL[@]}" delete pod "${pod}" --wait=false >/dev/null
+  log "Answers in ./${dest} (summary.md: correct / cut off / valid labels per question and model)"
+}
+
 step_status() {
-  "${KUBECTL[@]}" get job "${JOB_NAME}" "${JOB_NAME}-export" 2>/dev/null || true
-  "${KUBECTL[@]}" get pods -l "job-name in (${JOB_NAME},${JOB_NAME}-export)" || true
+  "${KUBECTL[@]}" get job "${JOB_NAME}" "${JOB_NAME}-export" "${JOB_NAME}-answer" 2>/dev/null || true
+  "${KUBECTL[@]}" get pods -l "job-name in (${JOB_NAME},${JOB_NAME}-export,${JOB_NAME}-answer)" || true
   "${KUBECTL[@]}" get events --sort-by=.lastTimestamp | tail -15 || true
 }
 
@@ -212,8 +277,8 @@ step_export() {
 }
 
 step_clean() {
-  log "Deleting Jobs ${JOB_NAME} and ${JOB_NAME}-export"
-  "${KUBECTL[@]}" delete job "${JOB_NAME}" "${JOB_NAME}-export" --ignore-not-found
+  log "Deleting Jobs ${JOB_NAME}, ${JOB_NAME}-export and ${JOB_NAME}-answer"
+  "${KUBECTL[@]}" delete job "${JOB_NAME}" "${JOB_NAME}-export" "${JOB_NAME}-answer" --ignore-not-found
 }
 
 # ---------------------------------------------------------------------------
@@ -229,6 +294,8 @@ case "${1:-all}" in
   logs) cluster_config; follow_job "${JOB_NAME}" ;;
   status) cluster_config; step_status ;;
   export) cluster_config; step_export ;;
+  answer) cluster_config; step_answer ;;
+  fetch-answers) cluster_config; step_fetch_answers ;;
   clean) cluster_config; step_clean ;;
   all)
     cluster_config
@@ -240,7 +307,7 @@ case "${1:-all}" in
     follow_job "${JOB_NAME}"
     ;;
   *)
-    echo "usage: $0 [all|data|test|image|secrets|pvc|submit|logs|status|export|clean]" >&2
+    echo "usage: $0 [all|data|test|image|secrets|pvc|submit|logs|status|export|answer|fetch-answers|clean]" >&2
     exit 1
     ;;
 esac

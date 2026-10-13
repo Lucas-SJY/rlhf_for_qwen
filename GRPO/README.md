@@ -170,11 +170,11 @@ unless `CKPT_SAVE_OPTIMIZER=true`. A resumed run then restarts Adam's moments.
 Done locally, without a GPU:
 
 - **Reward and data.**
-  - `../run.sh test`: 44 unit tests (reward incl. the 0.2 / 0.8 weights, the invalid-label
+  - `../run.sh test`: 49 unit tests (reward incl. the 0.2 / 0.8 weights, the invalid-label
     rule, cut-off answers left out of the logged reward and the math_verify answer check;
     the workflow's regenerate loop, prompt handling and the overlong termination reason
     the trainer filters on; the grpo_try and rest_grpo task builders and their format
-    checks). The 4
+    checks; the scoring and summary of answer_tasks.py). The 4
     math_verify tests need Python >= 3.10 and the 5 workflow tests need rLLM; both are
     skipped without them.
   - `../run.sh data`: 5,042 / 102 tasks, split identical to SFT.
@@ -235,7 +235,8 @@ GRPO/
 ├── k8s/
 │   ├── pvc.yaml             150Gi PVC for outputs
 │   ├── job.yaml             training Job, N_GPUS cards of GPU_TYPE (L40 / A6000 / A100)
-│   └── export-job.yaml      CPU Job: checkpoint -> HF model
+│   ├── export-job.yaml      CPU Job: checkpoint -> HF model
+│   └── answer-job.yaml      GPU Job: export + SFT model answer a task file (../run.sh answer)
 ├── src/
 │   ├── prepare_data.py      bespoke-v2 -> data/{train,validation}.jsonl
 │   ├── prepare_grpo_try.py  ../grpo_try -> data/grpo_try/{train,validation}.jsonl
@@ -245,11 +246,12 @@ GRPO/
 │   ├── train_grpo.py        Hydra entry point: datasets, Ray, rLLM AgentTrainer(backend="verl")
 │   ├── entrypoint.sh        env -> Hydra overrides -> train_grpo.py
 │   ├── export_policy.py     verl checkpoint -> merged HF model
+│   ├── answer_tasks.py      answer a task file with several models, score every answer
 │   └── labelcot/
 │       ├── reward.py        the label-following reward (stdlib only)
 │       ├── workflow.py      rLLM Workflow: SFT-identical prompt, generation, scoring
 │       └── patches.py       final checkpoint for rLLM's verl backend
 ├── tests/                 test_reward.py, test_prepare_grpo_try.py, test_prepare_rest_grpo.py,
-│                          test_workflow.py
+│                          test_workflow.py, test_answer_tasks.py
 └── data/                    generated, gitignored, baked into the image
 ```

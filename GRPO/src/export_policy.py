@@ -35,7 +35,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--step", type=int, default=int(os.environ.get("EXPORT_STEP", "0")),
                    help="global step to export, 0 means the latest")
     p.add_argument("--base-model", default=os.environ.get("POLICY_MODEL_PATH", "/data/runs/qwen3-8b-sft-v3"),
-                   help="the SFT checkpoint GRPO started from")
+                   help="the SFT checkpoint GRPO started from: a directory or a Hugging Face repo id")
+    p.add_argument("--base-revision", default=os.environ.get("POLICY_MODEL_REVISION", ""),
+                   help="branch, tag or commit of a repo-id --base-model (as POLICY_MODEL_REVISION for training)")
     p.add_argument("--output-dir", default="", help=f"defaults to {run_dir}/export/global_step_<N>")
     return p.parse_args()
 
@@ -72,13 +74,23 @@ def main() -> None:
     import torch
     from transformers import AutoModelForCausalLM
 
+    # A Hub base model with a revision resolves to its local snapshot (the training run
+    # already downloaded it into HF_HOME), so the tokenizer files below come from that
+    # revision and not from the repo's default branch.
+    base_model = args.base_model
+    if args.base_revision and not Path(base_model).is_dir():
+        from huggingface_hub import snapshot_download
+
+        base_model = snapshot_download(base_model, revision=args.base_revision)
+        print(f"[export] base model       : {args.base_model}@{args.base_revision} -> {base_model}", flush=True)
+
     adapter_dir = staging / "lora_adapter"
     out_dir.mkdir(parents=True, exist_ok=True)
     if adapter_dir.is_dir():
         from peft import PeftModel
 
-        print(f"[export] merging {adapter_dir} into {args.base_model}", flush=True)
-        model = AutoModelForCausalLM.from_pretrained(args.base_model, dtype=torch.bfloat16)
+        print(f"[export] merging {adapter_dir} into {base_model}", flush=True)
+        model = AutoModelForCausalLM.from_pretrained(base_model, dtype=torch.bfloat16)
         model = PeftModel.from_pretrained(model, str(adapter_dir)).merge_and_unload()
         model.save_pretrained(out_dir)
         shutil.copytree(adapter_dir, out_dir / "lora_adapter", dirs_exist_ok=True)
@@ -88,16 +100,16 @@ def main() -> None:
         for item in staging.iterdir():
             shutil.move(str(item), out_dir / item.name)
 
-    if Path(args.base_model).is_dir():
+    if Path(base_model).is_dir():
         for name in TOKENIZER_FILES:
-            src = Path(args.base_model) / name
+            src = Path(base_model) / name
             if src.is_file():
                 shutil.copy2(src, out_dir / name)
     else:
         # A Hub id such as Qwen/Qwen3-0.6B: save its tokenizer and chat template from the cache.
         from transformers import AutoTokenizer
 
-        AutoTokenizer.from_pretrained(args.base_model).save_pretrained(out_dir)
+        AutoTokenizer.from_pretrained(base_model).save_pretrained(out_dir)
     shutil.rmtree(staging, ignore_errors=True)
     print(f"[export] done: {out_dir}")
 

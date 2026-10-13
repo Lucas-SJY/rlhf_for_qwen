@@ -1,0 +1,98 @@
+# MATH-500 evaluation Job for GRPO checkpoints.
+#
+# Do not apply this by hand -- evaluate/run_eval.sh renders the ${...} placeholders and
+# creates the grpo-eval-code ConfigMap this file mounts.
+#
+# The evaluation itself is ../../train/evaluate's, unchanged: the same eval_math500.py
+# (mounted from a ConfigMap), the same image (the SFT training image, ${IMAGE}, so the
+# same torch / transformers versions), the same card type and the same EVAL_* settings
+# as ../../train/evaluate/k8s/eval-job.yaml. That keeps the scores directly comparable
+# with the SFT v3 baseline evaluated there (accuracy_string 0.814, accuracy_judge 0.846).
+#
+# What differs is only where things live: the model is a GRPO export on the RL PVC
+# (../run.sh export), results go to /grpo/eval on that PVC, and the Job and ConfigMap
+# have their own names so they do not collide with ../train's qwen-eval / eval-code in
+# the same namespace. The RL PVC is ReadWriteOnce: this Job cannot start on another
+# node while a training pod holds it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: qwen-grpo-eval
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 604800
+  template:
+    spec:
+      restartPolicy: Never
+      # Same card as the SFT baseline run: batched greedy generation is not invariant
+      # across GPU types, so the comparison uses the same one. At batch 6 the KV cache
+      # is 10.6G on top of 16.4G of bf16 weights, which a 47G RTX A6000 holds.
+      imagePullSecrets:
+        - name: nrp-registry
+      containers:
+        - name: evaluator
+          image: ${IMAGE}
+          imagePullPolicy: Always
+          command: ["python", "/eval/eval_math500.py"]
+          envFrom:
+            # The GRPO Secret, for HF_TOKEN / HF_HOME. EVAL_* below win over anything
+            # training-specific in there; eval_math500.py reads nothing else but SEED (42).
+            - secretRef:
+                name: grpo-env
+          env:
+            - name: EVAL_MODEL
+              value: ${EVAL_MODEL}
+            - name: EVAL_RUN_NAME
+              value: ${EVAL_RUN_NAME}
+            - name: EVAL_DATASET
+              value: HuggingFaceH4/MATH-500
+            - name: EVAL_OUTPUT_DIR
+              value: /grpo/eval
+            # As in ../train: 6 fits a 47G card; 12 OOMed there 13 hours into a run.
+            - name: EVAL_BATCH_SIZE
+              value: "6"
+            # As in ../train: the SFT training window. GRPO trained with 8,192 response
+            # tokens, but the budget stays at the baseline's so the numbers compare.
+            - name: EVAL_MAX_NEW_TOKENS
+              value: "12288"
+            # The GRPO checkpoints start from SFT v3, which opens its own <think>.
+            - name: EVAL_ENABLE_THINKING
+              value: "true"
+            - name: PYTORCH_CUDA_ALLOC_CONF
+              value: expandable_segments:True
+            - name: PYTORCH_ALLOC_CONF
+              value: expandable_segments:True
+            - name: EVAL_TEMPERATURE
+              value: "0"
+            # 0 runs all 500; EVAL_LIMIT=20 ./evaluate/run_eval.sh for a smoke test.
+            - name: EVAL_LIMIT
+              value: "${EVAL_LIMIT}"
+          resources:
+            requests:
+              nvidia.com/rtxa6000: 1
+              cpu: "4"
+              memory: 32Gi
+              ephemeral-storage: 10Gi
+            limits:
+              nvidia.com/rtxa6000: 1
+              cpu: "4"
+              memory: 32Gi
+              ephemeral-storage: 10Gi
+          volumeMounts:
+            - name: grpo
+              mountPath: /grpo
+            - name: eval-code
+              mountPath: /eval
+            - name: dshm
+              mountPath: /dev/shm
+      volumes:
+        - name: grpo
+          persistentVolumeClaim:
+            claimName: ${RL_PVC_NAME}
+        - name: eval-code
+          configMap:
+            name: grpo-eval-code
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi

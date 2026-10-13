@@ -10,6 +10,12 @@
 GRPO/data/
 # Questions without a checkable answer, split off by GRPO/src/prepare_rest_grpo.py
 /no_answer/
+# Scored model answers copied back by ./run.sh answer / fetch-answers
+/answers/
+# Training questions held out for manual inspection (GRPO/src/prepare_rest_grpo.py)
+/manual_inspection/
+# MATH-500 results fetched by evaluate/run_eval.sh
+/eval-results/
 
 __pycache__/
 *.py[cod]

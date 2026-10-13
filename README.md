@@ -202,7 +202,7 @@ python3 GRPO/src/prepare_rest_grpo.py --no-answer-dir ''  # keep every question 
   distinct values (several roots, multi-part questions), for which the last `\boxed{}`
   kept as the answer is incomplete. `no_answer/` holds 5,623 / 631.
 - **Held out for manual inspection.** 10 of those training questions, drawn at random
-  (seeded), are moved to `manual_inspection/` at the repository root and never trained
+  (seeded), are moved to `manual_inspection/` at the repository root (gitignored) and never trained
   on: `tasks.jsonl` in the task format, and `trajectories/<id>.json`, a copy of each
   upstream trajectory (question, DeepSeek-R1 reasoning, solution). The validation set is
   untouched. `GRPO/data/rest_grpo/` therefore has **4,776 train / 526 validation**
@@ -225,6 +225,46 @@ Validation metrics are then logged as `val/rest_grpo/...`. One validation pass o
 526 questions (one answer each, up to 8,192 tokens) took ~25 min on one A100 and ~9 min on
 two; a smaller `VAL_FILE` keeps it cheaper. The SFT checkpoint scores pass@1 0.80–0.83 on
 it before training (three runs), 14–16 % of its answers cut off at the length limit.
+
+## Answering the held-out questions
+
+After a run, `./run.sh answer` has the trained model and the SFT checkpoint it started from
+answer the questions in `ANSWER_TASKS` (default `manual_inspection/tasks.jsonl`, the 10
+questions held out of rest_grpo training), scores every answer like training does, and
+copies the results to `answers/<RUN_NAME>/` (gitignored):
+
+```bash
+./run.sh export    # CPU Job: latest checkpoint -> HF model in /grpo/runs/<RUN_NAME>/export/
+./run.sh answer    # GPU Job (one card of GPU_TYPE), then copy to ./answers/<RUN_NAME>/
+```
+
+- **Models.** `grpo` = the latest export of `RUN_NAME`, `sft` = `POLICY_MODEL_PATH` at
+  `POLICY_MODEL_REVISION`. Both answer from the training prompt (the task's chat-format
+  prompt with the model's own chat template) with the validation sampling (temperature
+  0.6, top-p 0.95, top-k 20, at most `MAX_RESPONSE_LENGTH` tokens), `ANSWER_SAMPLES`
+  (default 4) answers per question. There is no regeneration on invalid labels: answers
+  are kept as generated.
+- **Output.** `answers/<RUN_NAME>/<model>/<id>.json` holds the question, the reference
+  answer and every answer with its score (label validity, invalid tags, label counts,
+  correctness of the final answer, the reward, or none for a cut-off answer, and the
+  response itself); `summary.md` / `summary.json` count correct, cut-off and valid-label
+  answers per question and model.
+- **Mechanics.** The task file reaches the Job as the ConfigMap `<JOB_NAME>-answer-tasks`;
+  the results are written to the RL PVC and copied back by a throwaway busybox pod
+  (`./run.sh fetch-answers` repeats only that copy). The RL PVC is ReadWriteOnce, so run
+  this after the training pod is gone.
+
+## MATH-500 evaluation
+
+[`evaluate/`](evaluate/README.md) scores a GRPO export on MATH-500 exactly as
+`../train/evaluate` scored the SFT checkpoints (same scripts, image, prompt, greedy
+decoding, batch size and card), so the result compares directly with the SFT v3
+baseline (`accuracy_string` 0.814):
+
+```bash
+EVAL_MODEL=/grpo/runs/<run>/export/global_step_<N> ./evaluate/run_eval.sh
+./evaluate/run_eval.sh fetch      # -> eval-results/ (gitignored)
+```
 
 ## What to watch in wandb
 

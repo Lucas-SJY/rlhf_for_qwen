@@ -5,8 +5,9 @@
 # Submitted by ../run.sh answer, which substitutes the ${...} placeholders, first puts the
 # task file (ANSWER_TASKS, default manual_inspection/tasks.jsonl) into the ConfigMap
 # ${JOB_NAME}-answer-tasks, and afterwards copies the results to ./answers/<RUN_NAME>/.
-# One card of GPU_TYPE is plenty: inference of the 8B model in bf16 needs ~16 GB plus the
-# KV cache. ANSWER_SAMPLES in .env sets the answers per question and model (default 4).
+# One card of ANSWER_GPU_TYPE (default a6000, 48 GB) at normal priority is plenty:
+# inference of the 8B model in bf16 needs ~16 GB plus the KV cache, so the A100s stay free
+# for training. ANSWER_SAMPLES in .env sets the answers per question and model (default 4).
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -36,17 +37,24 @@ spec:
           envFrom:
             - secretRef:
                 name: grpo-env
+          env:
+            # grpo-env carries the training pod's thread count (CPU Adam); match the limit.
+            - name: OMP_NUM_THREADS
+              value: "1"
+          # Inference is GPU-bound, so one core is enough, and 48 GB nodes often have a
+          # free card but little unrequested CPU. NRP allows a CPU limit of at most 1.2 x
+          # the request.
           resources:
             requests:
               ${GPU_RESOURCE}: 1
-              cpu: "8"
-              memory: 64Gi
-              ephemeral-storage: 20Gi
+              cpu: "1"
+              memory: 32Gi
+              ephemeral-storage: 10Gi
             limits:
               ${GPU_RESOURCE}: 1
-              cpu: "8"
-              memory: 64Gi
-              ephemeral-storage: 20Gi
+              cpu: 1200m
+              memory: 32Gi
+              ephemeral-storage: 10Gi
           volumeMounts:
             - name: rl
               mountPath: /grpo

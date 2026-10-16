@@ -11,7 +11,7 @@ and the reward, which a cut-off answer does not get.
 
 Models default to the run's latest export (label "grpo", made by export_policy.py /
 ../run.sh export) and the SFT checkpoint the run started from (label "sft"), so the two
-can be compared. Each model runs in its own subprocess, which frees its GPU memory before
+can be compared; ANSWER_MODELS=grpo answers with the export alone. Each model runs in its own subprocess, which frees its GPU memory before
 the next one loads.
 
 Output under --output-dir (default /grpo/answers/<RUN_NAME>):
@@ -47,6 +47,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--model", action="append", default=[],
                    help="LABEL=PATH, repeatable; default: grpo=<latest export> and sft=<the SFT checkpoint>")
     p.add_argument("--run-dir", default=str(run_dir), help="training run whose latest export is the grpo model")
+    p.add_argument("--models", default=os.environ.get("ANSWER_MODELS", "grpo,sft"),
+                   type=lambda s: [m.strip() for m in s.split(",") if m.strip()],
+                   help="which default models to answer with: grpo (the latest export) and/or sft")
     p.add_argument("--samples", type=int, default=int(os.environ.get("ANSWER_SAMPLES", "4")))
     p.add_argument("--max-prompt-tokens", type=int, default=int(os.environ.get("MAX_PROMPT_LENGTH", "2048")))
     p.add_argument("--max-response-tokens", type=int, default=int(os.environ.get("MAX_RESPONSE_LENGTH", "8192")))
@@ -63,8 +66,24 @@ def parse_model(spec: str) -> tuple[str, str]:
     return label, path
 
 
-def default_models(run_dir: Path) -> list[tuple[str, str]]:
-    """grpo = the latest export of run_dir, sft = the checkpoint the run started from."""
+def default_models(run_dir: Path, labels: list[str]) -> list[tuple[str, str]]:
+    """grpo = the latest export of run_dir, sft = the checkpoint the run started from.
+
+    labels picks which of the two (ANSWER_MODELS, default both): loading a model from the
+    PVC can take an hour, and the SFT answers do not change from one run to the next.
+    """
+    unknown = sorted(set(labels) - {"grpo", "sft"})
+    if unknown or not labels:
+        raise SystemExit(f"ANSWER_MODELS takes grpo and/or sft, got {','.join(labels) or 'nothing'}")
+    models = []
+    if "grpo" in labels:
+        models.append(("grpo", latest_export(run_dir)))
+    if "sft" in labels:
+        models.append(("sft", base_model()))
+    return models
+
+
+def latest_export(run_dir: Path) -> str:
     tracker = run_dir / "checkpoints" / "latest_checkpointed_iteration.txt"
     if not tracker.is_file():
         raise SystemExit(f"no {tracker}: the run has no checkpoint to answer with")
@@ -72,13 +91,17 @@ def default_models(run_dir: Path) -> list[tuple[str, str]]:
     export = run_dir / "export" / f"global_step_{step}"
     if not (export / "config.json").is_file():
         raise SystemExit(f"{export} is not exported yet; run ../run.sh export first")
+    return str(export)
+
+
+def base_model() -> str:
     base = os.environ.get("POLICY_MODEL_PATH", "/data/runs/qwen3-8b-sft-v3")
     revision = os.environ.get("POLICY_MODEL_REVISION", "")
     if revision and not Path(base).is_dir():
         from huggingface_hub import snapshot_download
 
         base = snapshot_download(base, revision=revision)
-    return [("grpo", str(export)), ("sft", base)]
+    return base
 
 
 def score_sample(text: str, finish_reason: str, response_tokens: int, task: dict) -> dict:
@@ -195,7 +218,7 @@ def main() -> None:
         answer_with(label, path, tasks, args, out_dir)
         return
 
-    models = [parse_model(m) for m in args.model] or default_models(Path(args.run_dir))
+    models = [parse_model(m) for m in args.model] or default_models(Path(args.run_dir), args.models)
     print(f"[answer] {len(tasks)} questions x {args.samples} samples from {args.tasks} -> {out_dir}", flush=True)
     for label, path in models:
         print(f"[answer] model {label}: {path}", flush=True)

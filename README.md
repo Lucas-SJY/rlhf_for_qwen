@@ -235,7 +235,7 @@ copies the results to `answers/<RUN_NAME>/` (gitignored):
 
 ```bash
 ./run.sh export    # CPU Job: latest checkpoint -> HF model in /grpo/runs/<RUN_NAME>/export/
-./run.sh answer    # GPU Job (one card of GPU_TYPE), then copy to ./answers/<RUN_NAME>/
+./run.sh answer    # GPU Job (one ANSWER_GPU_TYPE card, default a6000), then copy to ./answers/<RUN_NAME>/
 ```
 
 - **Models.** `grpo` = the latest export of `RUN_NAME`, `sft` = `POLICY_MODEL_PATH` at
@@ -243,7 +243,8 @@ copies the results to `answers/<RUN_NAME>/` (gitignored):
   prompt with the model's own chat template) with the validation sampling (temperature
   0.6, top-p 0.95, top-k 20, at most `MAX_RESPONSE_LENGTH` tokens), `ANSWER_SAMPLES`
   (default 4) answers per question. There is no regeneration on invalid labels: answers
-  are kept as generated.
+  are kept as generated. `ANSWER_MODELS=grpo` (or `sft`) answers with one of the two only;
+  loading a model from the RL PVC can take an hour, and the SFT answers do not change.
 - **Output.** `answers/<RUN_NAME>/<model>/<id>.json` holds the question, the reference
   answer and every answer with its score (label validity, invalid tags, label counts,
   correctness of the final answer, the reward, or none for a cut-off answer, and the
@@ -256,15 +257,21 @@ copies the results to `answers/<RUN_NAME>/` (gitignored):
 
 ## MATH-500 evaluation
 
-[`evaluate/`](evaluate/README.md) scores a GRPO export on MATH-500 exactly as
-`../train/evaluate` scored the SFT checkpoints (same scripts, image, prompt, greedy
-decoding, batch size and card), so the result compares directly with the SFT v3
-baseline (`accuracy_string` 0.814):
+[`evaluate/`](evaluate/README.md) generates MATH-500 answers with a GRPO export exactly as
+`../train/evaluate` did for the SFT checkpoints (same scripts, image, prompt, greedy
+decoding, batch size and card), and scores every run three ways: the string scorer
+(compares directly with the SFT v3 baseline's 0.814), Hugging Face Math-Verify (baseline
+0.852) and the LLM judge (baseline 0.846):
 
 ```bash
-EVAL_MODEL=/grpo/runs/<run>/export/global_step_<N> ./evaluate/run_eval.sh
-./evaluate/run_eval.sh fetch      # -> eval-results/ (gitignored)
+EVAL_MODEL=/grpo/runs/<run>/export/global_step_<N> ./evaluate/run_eval.sh submit
+EVAL_MODEL=/grpo/runs/<run>/export/global_step_<N> ./evaluate/run_eval.sh fetch
+#   -> evaluate/results/<run>-global_step_<N>/ (gitignored), scored
 ```
+
+`./evaluate/rollout_stats.sh` counts a run's training rollouts per question (how many of
+the 16 were correct or cut off) from the episode logs on the PVC; see
+[evaluate/README.md](evaluate/README.md#rollout-outcomes-of-a-training-run).
 
 ## What to watch in wandb
 

@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from answer_tasks import parse_model, question_summary, score_sample, summary_markdown  # noqa: E402
+from answer_tasks import default_models, parse_model, question_summary, score_sample, summary_markdown  # noqa: E402
 
 TASK = {"id": "sample_000001", "question": "What is 4 + 5?", "answer": "9"}
 RIGHT = "<think>\n[logical_deduction] 4 + 5 = 9.\n\n[concluding] So 9.\n</think>\n\nThe answer is $\\boxed{9}$."
@@ -49,6 +49,20 @@ class SummaryTest(unittest.TestCase):
         table = summary_markdown({"grpo": [grpo], "sft": [sft]})
         self.assertIn("| sample_000001 | `9` | 2/2 / 0 / 2 / 50 | 1/2 / 1 / 1 / 4116 |", table)
         self.assertIn("| **total** | | **2/2** / 0 / 2 | **1/2** / 1 / 1 |", table)
+
+    def test_answer_models_picks_the_default_models(self):
+        import os
+        import tempfile
+        from unittest import mock
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env = {"POLICY_MODEL_PATH": tmp, "POLICY_MODEL_REVISION": ""}
+            with mock.patch.dict(os.environ, env):
+                self.assertEqual(default_models(Path(tmp) / "run", ["sft"]), [("sft", tmp)])
+                with self.assertRaises(SystemExit):  # no checkpoint, so no export to answer with
+                    default_models(Path(tmp) / "run", ["grpo"])
+                with self.assertRaises(SystemExit):
+                    default_models(Path(tmp) / "run", ["base"])
 
     def test_model_spec(self):
         self.assertEqual(parse_model("grpo=/grpo/runs/x/export/global_step_200"),

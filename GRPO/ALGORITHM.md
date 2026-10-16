@@ -1,9 +1,13 @@
 # GRPO setup: computation and reward
 
-This file specifies exactly what the current GRPO run computes: the per-step pipeline,
-the formulas used, the reward function, and the hyperparameters. It describes the code
-as it is, including its known weaknesses. For how to run it, see
-[README.md](README.md) and the project root [README](../README.md).
+This file specifies exactly what the GRPO configuration **V1** computes: the per-step
+pipeline, the formulas, the reward function, every hyperparameter, and what the V1 run
+measured. It describes the code as it is, including its known weaknesses. For how to run
+it, see [README.md](README.md) and the project root [README](../README.md).
+
+Versions: V1 is the first fixed configuration; earlier runs were trials (§7). A later
+version gets its own column in §5, with the settings it changes in bold, and its results
+in §6. **Any change to the configuration is recorded in §5 in the same change.**
 
 Where each part lives:
 
@@ -11,29 +15,22 @@ Where each part lives:
 - losses: verl 0.8.0 `workers/utils/losses.py` and `trainer/ppo/core_algos.py`;
 - reward: `src/labelcot/reward.py`;
 - rollout and scoring: `src/labelcot/workflow.py`;
-- hyperparameters: `src/entrypoint.sh`.
+- hyperparameters: `src/entrypoint.sh` (code defaults) and `.env` (the values of a run,
+  listed in §5). `.env.example` is a template whose defaults are not V1's (§5.7).
 
 ---
 
 ## 1. Models
 
-The starting point, `qwen3-8b-sft-v3`, is a **full-parameter** SFT checkpoint with no
-adapter. **GRPO adds a new LoRA adapter** at the start of the run on top of the full SFT
-weights. The adapter's B matrix starts at zero, so at step 0 the policy behaves exactly
-like the SFT model. GRPO then trains only this adapter.
+The starting point is the full-parameter SFT checkpoint
+`Lucas-SJY/qwen3-8b-sft-bespoke` at revision `v3` (Qwen3-8B fine-tuned on the labelled
+bespoke-v2 traces). V1 trains **all of its parameters**; there is no adapter.
 
 | role | model | trained | notes |
 |---|---|---|---|
-| policy (actor) | full-parameter SFT checkpoint `qwen3-8b-sft-v3` + a new LoRA adapter added by GRPO (rank 64, alpha 32, all linear layers) | the GRPO adapter only | SFT weights stay frozen, kept in fp32 by FSDP |
-| reference policy | the same model with the LoRA adapter switched off | no | used only for the KL loss term; costs no extra memory |
-| rollout engine | vLLM, serving the base weights + the current adapter | — | adapter re-synced after every step |
-
-`LORA_RANK=0` switches to full-parameter training. All weights are then updated, verl keeps
-a separate frozen copy of the model as the reference policy, and vLLM receives the full
-weights after every update. fp32 weights, gradients and Adam state of the 8B model are
-~128 GB, so this runs FSDP-sharded on `N_GPUS=4` A100-80GB cards (one vLLM replica per
-card), with `ACTOR_LR=1e-6`; or on 1–2 cards with `FSDP_CPU_OFFLOAD=true`, where FSDP2 keeps
-that state in host RAM and Adam steps on the CPU. The update is the same either way.
+| policy (actor) | the SFT checkpoint | all parameters | FSDP2 sharded over 2 GPUs; fp32 weights, gradients and Adam state (~130 GB) live in host RAM (§5.4) |
+| reference policy | a separate frozen copy of the SFT checkpoint | no | used only for the KL loss term; CPU-offloaded |
+| rollout engine | vLLM, one replica per GPU, serving the current policy weights | — | receives all weights after every step |
 
 There is **no critic (value model)** and **no learned reward model**. The baseline for
 each answer is the mean reward of the other answers to the same question, and the reward
@@ -41,32 +38,36 @@ is the rule function in section 4.
 
 ## 2. One training step
 
-With `B = 8` questions per step and group size `G = 8`:
+With `B = 8` questions per step and group size `G = 16`:
 
-1. **Sample questions.** Draw 8 questions from `GRPO/data/train.jsonl`, shuffled with a
-   fixed seed. The prompt is the bare question rendered with the SFT chat template, ending
-   at `<|im_start|>assistant\n`.
-2. **Roll out.** vLLM generates **8 independent answers per question**, 64 in total, at
-   temperature 1.0 with no top-p/top-k and at most 8,192 new tokens.
+1. **Sample questions.** Draw 8 questions from `GRPO/data/rest_grpo/train.jsonl` (4,776
+   questions), shuffled with seed 42. The prompt is the task's single user turn (the
+   question, which already asks for a `\boxed{}` final answer), rendered with the
+   checkpoint's chat template in thinking mode and ending at `<|im_start|>assistant\n`.
+2. **Roll out.** vLLM generates **16 independent answers per question**, 128 in total, at
+   temperature 1.0 with no top-p/top-k and at most 8,192 new tokens. An answer with an
+   invalid tag is regenerated (up to 3 times, §4.3).
 3. **Score.** `score_completion` turns each answer into a scalar reward `R` (section 4).
-4. **Group.** The 64 answers are grouped by question id: 8 groups of 8. Answers cut off
-   at the 8,192-token limit are dropped here (`MASK_TRUNCATED=true`, rLLM's compact
-   filtering): they get no advantage and no gradient, and a group keeps only its finished
-   answers. A step in which every answer was cut off is skipped.
+4. **Group.** The 128 answers are grouped by question id: 8 groups of 16. Answers cut off
+   at the 8,192-token limit are dropped here (rLLM's compact filtering): they get no
+   advantage and no gradient, and a group keeps only its finished answers. A step in
+   which every answer was cut off is skipped.
 5. **Advantages.** Group-normalised advantages (section 3.1), one number per answer,
    applied to every token of that answer.
 6. **Old log-probs.** The actor recomputes `log π_old(a_t | s_t)` for every response token.
    These values, not vLLM's, are the ratio denominator.
-7. **Reference log-probs.** The actor with its adapter disabled computes
-   `log π_ref(a_t | s_t)`.
+7. **Reference log-probs.** The frozen reference model computes `log π_ref(a_t | s_t)`.
 8. **Actor update** with the clipped policy loss plus KL loss (sections 3.2 and 3.3), in
-   `B / 4 = 2` mini-batches of 4 questions (32 answers each), 1 epoch: two optimizer
-   updates per step.
-9. **Sync.** Push the new LoRA weights to vLLM.
+   `B / 4 = 2` mini-batches of 4 questions (up to 64 answers each), 1 epoch: two
+   optimizer updates per step. Each mini-batch is processed in micro-batches of up to
+   32,768 tokens per GPU; the Adam step runs on the CPU.
+9. **Sync.** The updated weights are copied into vLLM before the next rollout.
 10. **Periodic work.**
-    - Validation on the 102 held-out questions (1 answer each) at step 0, every 20 steps,
-      and at the end.
-    - A checkpoint every 20 steps and after the last step.
+    - Validation on the 526 questions of `rest_grpo/validation.jsonl` (1 answer each)
+      at step 0, every 20 steps, and at the end.
+    - A checkpoint (weights only, no Adam state) every 10 steps and after the last step.
+
+200 steps draw 1,600 of the 4,776 training questions, so no question is seen twice.
 
 ## 3. Formulas
 
@@ -75,7 +76,7 @@ answer `i` has tokens `a_{i,1} … a_{i,T_i}`:
 
 - `ε_low = 0.2`, `ε_high = 0.28`: asymmetric clip;
 - `c = 3.0`: dual-clip bound;
-- `β = 0.001`: KL coefficient.
+- `β = 0.01`: KL coefficient.
 
 ### 3.1 Group-relative advantage
 
@@ -83,7 +84,7 @@ answer `i` has tokens `a_{i,1} … a_{i,T_i}`:
 μ = mean(R_1 … R_G)
 σ = std(R_1 … R_G)                (population std, ddof = 0)
 
-A_i = (R_i − μ) / (σ + 1e-6)      if NORM_ADV_BY_STD=true   (standard GRPO, default)
+A_i = (R_i − μ) / (σ + 1e-6)      if NORM_ADV_BY_STD=true   (standard GRPO, V1)
 A_i =  R_i − μ                    if NORM_ADV_BY_STD=false  (Dr. GRPO)
 
 A_{i,t} = A_i                     for every token t of answer i
@@ -95,9 +96,10 @@ A_{i,t} = A_i                     for every token t of answer i
 - There is no discounting and no per-token credit assignment. Every token of an answer
   shares that answer's advantage.
 
-Checked locally with the real rLLM code: one group with rewards `[1.0, 0.0, 0.6, 1.0]`
-(perfect, cut off, wrong answer, perfect; scored with the earlier weights 0.3 / 0.3 / 0.4)
-gets advantages `[0.855, −1.588, −0.122, 0.855]`.
+Example: a V1 group of 16 with 12 right and 4 wrong answers, all with valid tags
+(`R = 1.0` and `0.2`), has `μ = 0.8`, `σ = 0.346`, so the right answers get `A = +0.577`
+and the wrong ones `A = −1.732`. (Checked locally with the real rLLM code: a group with
+rewards `[1.0, 0.0, 0.6, 1.0]` gets advantages `[0.855, −1.588, −0.122, 0.855]`.)
 
 ### 3.2 Policy loss (clipped, dual clip, asymmetric)
 
@@ -125,7 +127,10 @@ L = token-mean(L_{i,t}) + β · token-mean(kl_{i,t})
   not down-weighted per token.
 - There is no entropy bonus.
 - Unlike the classic PPO setup, the KL term is in the **loss**, not in the reward. rLLM's
-  unified trainer supports only this form. Set `KL_BETA=0` to drop it.
+  unified trainer supports only this form. `KL_BETA=0` drops it.
+- On the ~90 % of groups that have zero advantage, the KL term is the only gradient, so
+  it pulls those answers back toward the SFT policy. V1 uses `β = 0.01`
+  because at 0.001 the label mix drifted (§7).
 
 ## 4. The reward `R`
 
@@ -239,8 +244,9 @@ math_verify or by string matching. That is the case when any of the following ho
 - it contains `\text` or `\mbox`;
 - it contains a run of four or more letters outside LaTeX commands, i.e. prose.
 
-117 of 5,042 bespoke-v2 training answers (2.3 %) are not checkable, and 2 of the 9
-grpo_try questions (the two coding questions).
+rest_grpo keeps only questions with one checkable answer (the others went to
+`no_answer/`, see [`../data_distrib.md`](../data_distrib.md)): all 5,302 of its answers
+pass the check, so in V1 the `R = label_valid` branch never applies.
 
 ### 4.4 Worked examples
 
@@ -252,21 +258,18 @@ grpo_try questions (the two coding questions).
 | some paragraphs untagged, the rest valid, correct | 1 | **1.0** |
 | no tags at all, correct | 0 | **0.8** |
 | an invalid tag left after the retries, correct | 0 | **0.8** |
-| valid tags, prose answer (not checkable) | 1 | **1.0** |
-| no tags, prose answer (not checkable) | 0 | **0** |
 | no `</think>` (finished without closing the thought) | — | **0** |
 | hit 8,192 tokens | — | not trained on |
 
-All 5,042 bespoke-v2 SFT targets and all 9 grpo_try reference traces (with their
-answers) have valid tags and score 1.0. The annotated traces score `label_mix` 0.80 on
-average against the target (bespoke-v2: 10th percentile 0.71, median 0.81, 90th
-percentile 0.88), which is what the logged `label_mix` can be compared with.
+All 5,042 bespoke-v2 SFT targets have valid tags and score 1.0 with their own answers.
+The annotated traces score `label_mix` 0.80 on average against the target (10th
+percentile 0.71, median 0.81, 90th percentile 0.88), which is what the logged
+`label_mix` can be compared with.
 
 ### 4.5 What gets logged
 
-Per answer, averaged per step as `batch/<name>` (training) and
-`val/<data_source>/<name>` (validation; `<data_source>` is `bespoke_labeled_cot`, or
-`grpo_try` for that task set):
+Per answer, averaged per step as `batch/<name>` (training) and `val/rest_grpo/<name>`
+(validation; the middle part is the task's `data_source`):
 
 - `reward` (over the answers that are trained on, i.e. without the cut-off ones),
   `closed_think`, `truncated`;
@@ -279,73 +282,181 @@ Per answer, averaged per step as `batch/<name>` (training) and
 
 rLLM additionally logs `reward/policy/{mean,std,min,max}` and
 `advantage/policy/{mean,std}` (both over the answers left after dropping the cut-off ones),
+`batch/policy/fractions/{effective,too_easy,too_hard}` (the share of groups whose rewards
+differ, are all high, are all low),
 `groups/num_trajs_before_filter` / `groups/num_trajs_after_filter` (answers generated, and
-answers trained on) and `batch/termination_reason/max_response_length_exceeded`. An episode counts as correct (`is_correct`, which feeds
-`val/<data_source>/pass@1`) only when `answer_correct` is true.
+answers trained on) and `batch/termination_reason/max_response_length_exceeded`. An
+episode counts as correct (`is_correct`, which feeds `val/rest_grpo/pass@1`) only when
+`answer_correct` is true.
 
 ## 5. Hyperparameters
 
-| group | setting | value | config key (env var) |
-|---|---|---|---|
-| data | questions per step | 8 | `rllm.data.train_batch_size` (`TRAIN_BATCH_SIZE`) |
-| | answers per question (group size) | 8 | `rllm.rollout.n` (`GROUP_SIZE`) |
-| | max prompt / response tokens | 2,048 / 8,192 | `rllm.data.max_prompt_length` / `max_response_length` |
-| | train / validation questions | 5,042 / 102 (SFT held-out ids); grpo_try: 6 / 3; rest_grpo (current runs): 4,776 / 526 | `GRPO/data/*.jsonl` (`TRAIN_FILE` / `VAL_FILE`); see `../data_distrib.md` |
-| rollout | train sampling | T = 1.0, top-p 1.0, top-k off | `rllm.rollout.train.*` |
-| | validation sampling | 1 answer, T = 0.6, top-p 0.95, top-k 20 | `rllm.rollout.val.*`, `rllm.rollout.n_val` |
-| | vLLM GPU share while generating | 0.7 | `actor_rollout_ref.rollout.gpu_memory_utilization` |
-| reward | weights valid labels / correct | 0.2 / 0.8 (`tag_rate`, `label_mix` logged, not rewarded) | `REWARD_W_LABEL` / `REWARD_W_CORRECT` |
-| | answers cut off at the length limit | dropped from training | `rllm.compact_filtering` (`MASK_TRUNCATED`) |
-| advantage | estimator | GRPO, std-normalised | `rllm.algorithm.adv_estimator`, `norm_adv_by_std_in_grpo` (`NORM_ADV_BY_STD`) |
-| loss | clip ε_low / ε_high, dual clip c | 0.2 / 0.28, 3.0 | `rllm.algorithm.eps_clip` / `eps_clip_high` (`CLIP_LOW` / `CLIP_HIGH`) |
-| | aggregation, entropy bonus | token-mean, 0 | `rllm.algorithm.loss_agg_mode`, `actor.entropy_coeff` |
-| | KL | k3 in the loss, β = 0.001 | `rllm.algorithm.kl_beta` (`KL_BETA`), `actor.kl_loss_type` |
-| actor | GRPO LoRA adapter rank / alpha / targets (on the full SFT weights) | 64 / 32 / all linear; 0 = full-parameter (on 4 A100s, lr 1e-6) | `actor_rollout_ref.model.{lora_rank,lora_alpha,target_modules}` (`LORA_RANK`, `N_GPUS`) |
-| | learning rate, schedule | 1e-5, constant | `actor_rollout_ref.actor.optim.lr` (`ACTOR_LR`) |
-| | optimizer | AdamW, β = (0.9, 0.999), weight decay 0.01, grad clip 1.0 | verl defaults |
-| | questions per optimizer update, epochs | 4 (so 2 updates per step), 1 | `actor.ppo_mini_batch_size` (`PPO_MINI_BATCH_SIZE`), `actor.ppo_epochs` |
-| | tokens per micro-batch | 12,288 (dynamic batching) | `actor.ppo_max_token_len_per_gpu` |
-| schedule | step cap, epochs | 200 steps (1,600 questions, 12,800 answers), 1 | `rllm.trainer.total_batches` (`TOTAL_TRAINING_STEPS`), `rllm.trainer.total_epochs` |
-| | validate / checkpoint every | 20 steps (+ end) | `rllm.trainer.test_freq` / `rllm.trainer.save_freq` |
+Every setting of V1. A new version adds a column after V1, with the values it changes in
+bold.
 
-## 6. Known properties and open questions
+V1 was trained as run `qwen3-8b-v3-full-offload-2gpu-rest-grpo-v2` (wandb `lx5ib7gm`):
+the run name predates the version numbering; its `v3` is the SFT checkpoint's revision.
+
+### 5.1 Model and data
+
+| setting | V1 | config key (env var) |
+|---|---|---|
+| starting checkpoint | `Lucas-SJY/qwen3-8b-sft-bespoke` @ `v3` (commit `e24173c`), downloaded once into `HF_HOME` on the RL PVC | `actor_rollout_ref.model.path` (`POLICY_MODEL_PATH`, `POLICY_MODEL_REVISION`) |
+| what is trained | all parameters (no LoRA) | `actor_rollout_ref.model.lora_rank` (`LORA_RANK=0`) |
+| reference policy (KL) | a separate frozen copy of the SFT checkpoint, CPU-offloaded | `actor_rollout_ref.ref.*` |
+| train / validation tasks | `GRPO/data/rest_grpo/`, 4,776 / 526 (math 4,560 / 495, science 216 / 31) | `TRAIN_FILE` / `VAL_FILE` |
+| held out, never trained on | `no_answer/` (no checkable answer), `manual_inspection/` (10 questions) | `src/prepare_rest_grpo.py` |
+| prompt | the task's user turn, the checkpoint's chat template, thinking on | `src/labelcot/workflow.py` |
+| max prompt / response tokens | 2,048 / 8,192 | `rllm.data.max_prompt_length` / `max_response_length` (`MAX_PROMPT_LENGTH`, `MAX_RESPONSE_LENGTH`) |
+| seed | 42 | `rllm.data.seed` (`SEED`) |
+
+### 5.2 Sampling and reward
+
+| setting | V1 | config key (env var) |
+|---|---|---|
+| questions per step | 8 | `rllm.data.train_batch_size` (`TRAIN_BATCH_SIZE`) |
+| answers per question (group size) | 16 | `rllm.rollout.n` (`GROUP_SIZE`) |
+| answers per step | 128 | |
+| train sampling | T 1.0, top-p 1.0, top-k off | `rllm.rollout.train.*` |
+| validation sampling | 1 answer, T 0.6, top-p 0.95, top-k 20 | `rllm.rollout.val.*`, `rllm.rollout.n_val` |
+| reward | 0.2 · label_valid + 0.8 · answer_correct | `REWARD_W_LABEL` / `REWARD_W_CORRECT` |
+| regenerations for an invalid tag | up to 3 | `MAX_LABEL_RETRIES` |
+| answers cut off at 8,192 tokens | dropped from training, as are failed or timed-out episodes; validation counts them as wrong | `rllm.compact_filtering.*` (`MASK_TRUNCATED=true`) |
+
+### 5.3 Objective and optimizer
+
+| setting | V1 | config key (env var) |
+|---|---|---|
+| advantage | GRPO, std-normalised per group | `rllm.algorithm.adv_estimator`, `norm_adv_by_std_in_grpo` (`NORM_ADV_BY_STD=true`) |
+| clip ε_low / ε_high, dual clip c | 0.2 / 0.28, 3.0 | `rllm.algorithm.eps_clip` / `eps_clip_high` (`CLIP_LOW` / `CLIP_HIGH`), `actor.clip_ratio_c` |
+| loss aggregation, entropy bonus | token-mean, 0 | `rllm.algorithm.loss_agg_mode`, `actor.entropy_coeff` |
+| KL to the reference | k3 (`low_var_kl`) in the loss, β 0.01 | `rllm.algorithm.kl_beta` (`KL_BETA`), `actor.kl_loss_type` |
+| learning rate | 2e-6 | `actor_rollout_ref.actor.optim.lr` (`ACTOR_LR`) |
+| schedule | constant, no warmup | verl defaults |
+| optimizer | AdamW, β (0.9, 0.999), weight decay 0.01, gradient clipping at norm 1.0 | verl defaults |
+| questions per optimizer update / updates per step | 4 / 2 | `actor.ppo_mini_batch_size` (`PPO_MINI_BATCH_SIZE`) |
+| epochs over each batch | 1 | `actor.ppo_epochs` |
+
+### 5.4 Compute
+
+| setting | V1 | config key (env var) |
+|---|---|---|
+| GPUs | 2 × A100-80GB on one node, normal priority | `trainer.n_gpus_per_node` (`N_GPUS`, `GPU_TYPE`, `GPU_PRIORITY_CLASS`) |
+| sharding / offload | FSDP2 with CPUOffloadPolicy: weights, gradients and Adam state stay in pinned host RAM; each layer is copied to the GPU only while it is computed; Adam steps on the CPU | `actor.strategy=fsdp2`, `fsdp_config.offload_policy=True` (`FSDP_CPU_OFFLOAD=true`) |
+| precision | fp32 master weights, bf16 compute | verl defaults |
+| tokens per micro-batch per GPU (update and log-prob passes), dynamic batching | 32,768 | `actor.ppo_max_token_len_per_gpu`, `*.log_prob_max_token_len_per_gpu` (`PPO_MAX_TOKEN_LEN`) |
+| gradient checkpointing, padding removal | on, on | `actor_rollout_ref.model.*` |
+| vLLM | one replica per GPU, tensor parallel 1, async, asleep (level 2) while the actor trains | `actor_rollout_ref.rollout.*` |
+| vLLM share of the GPU while generating | 0.8 | `rollout.gpu_memory_utilization` (`ROLLOUT_GPU_MEM_UTIL`) |
+| CPU threads per training worker (CPU Adam) | 9 | `OMP_NUM_THREADS` |
+| pod | 20 CPU, 288Gi RAM, 24Gi `/dev/shm` | `POD_CPU`, `POD_MEMORY`, `k8s/job.yaml` |
+| Ray object store | 16 GB | `RAY_OBJECT_STORE_GB` |
+| image patch | verl's `save_checkpoint` does not move CPUOffloadPolicy weights to the GPU (it crashed otherwise) | `docker/patch_verl.py` |
+
+### 5.5 Schedule and checkpoints
+
+| setting | V1 | config key (env var) |
+|---|---|---|
+| steps, epochs | 200 (1,600 questions, a third of the training set), 1 | `rllm.trainer.total_batches` (`TOTAL_TRAINING_STEPS`), `total_epochs` (`EPOCHS`) |
+| validation | at step 0, every 20 steps, at the end | `rllm.trainer.test_freq` (`TEST_FREQ`), `val_before_train` (`VAL_BEFORE_TRAIN`) |
+| checkpoint every | 10 steps (+ the last step) | `rllm.trainer.save_freq` (`SAVE_FREQ`) |
+| checkpoint contents | model + extra, no Adam state (~33 GB; a resumed run restarts Adam's moments) | `actor.checkpoint.save_contents` (`CKPT_SAVE_OPTIMIZER=false`) |
+| checkpoints kept | the latest only (the previous one is deleted after the next is written) | `trainer.max_actor_ckpt_to_keep=1` |
+
+### 5.6 Evaluation after training
+
+| setting | V1 | where |
+|---|---|---|
+| export | the last checkpoint merged into a Hugging Face model, tokenizer and chat template from the SFT revision | `src/export_policy.py` (`../run.sh export`) |
+| manual inspection | the 10 `manual_inspection/` questions, 4 answers each, validation sampling, scored like training; vLLM on 1 × RTX A6000 or L40 | `src/answer_tasks.py` (`../run.sh answer`, `ANSWER_GPU_TYPE`) |
+| MATH-500 | greedy, 12,288 new tokens, same as `../train`'s evaluation; transformers on 1 × RTX A6000 (`EVAL_GPU_TYPE=l40` for an L40); scored by string match, Math-Verify and the LLM judge (`qwen3-small`) | `../evaluate/` (`run_eval.sh`, `k8s/eval-job.yaml`) |
+
+### 5.7 Switches not used by V1
+
+`.env.example` and the code defaults describe a different setup: a LoRA adapter (rank 64,
+alpha 32, all linear layers, `ACTOR_LR=1e-5`) on one 48 GB L40, FSDP1 offloading during
+rollout, `GROUP_SIZE=8`, `KL_BETA=0.001`, `SAVE_FREQ=20`, `ROLLOUT_GPU_MEM_UTIL=0.7` and
+12,288 tokens per micro-batch. Other switches the code supports: `MASK_TRUNCATED=false`
+(cut-off answers trained on with `R = 0`), `NORM_ADV_BY_STD=false` (Dr. GRPO),
+`CKPT_SAVE_OPTIMIZER=true` (checkpoints with Adam state, ~100 GB each).
+
+## 6. Results and known properties
+
+### 6.1 The V1 run
+
+Validation on the 526 rest_grpo questions (1 answer each, T 0.6):
+
+| step | pass@1 | cut off | `reflecting` | `verifying` | `logical_deduction` | steps per thought | `label_mix` |
+|---|---|---|---|---|---|---|---|
+| 0 (SFT) | 80.6 % | 15.2 % | 22.3 % | 11.4 % | 21.3 % | 20.8 | 0.748 |
+| 40 | 79.7 % | 18.4 % | 27.0 % | 14.1 % | 18.9 % | 22.6 | 0.734 |
+| 80 | 79.8 % | 18.3 % | 25.4 % | 12.9 % | 18.3 % | 25.8 | 0.697 |
+| 120 | 78.3 % | 19.8 % | 20.4 % | 11.1 % | 22.9 % | 25.2 | 0.736 |
+| 160 | 76.8 % | 21.3 % | 19.9 % | 9.0 % | 21.8 % | 15.3 | 0.714 |
+| 200 | 78.5 % | 18.8 % | 21.7 % | 12.5 % | 21.5 % | 26.1 | 0.732 |
+
+Training: 11.2 min per step (~37 h for 200 steps). 106 of the 200 steps had at least one
+group with a nonzero advantage; on average 9.5 % of the groups did
+(`batch/policy/fractions/effective`). The per-token KL to the reference rose to 3.5e-3 at
+step 100 and 6.0e-3 at step 200.
+
+Reading: V1 did not improve accuracy (80.6 % → 78.5 %; the 2.1-point drop is about one
+standard error on 526 questions, but there is no gain), and more answers hit the 8,192-token limit
+(15.2 % → 18.8 %). The label mix stayed close to the SFT model's, unlike the trial run
+with `β = 0.001` (§7).
+
+MATH-500 (`../evaluate`, greedy, 12,288 new tokens, RTX A6000, the SFT baseline's setup):
+
+| | SFT v3 | V1 step 200 | only SFT / only V1 correct (sign test) |
+|---|---|---|---|
+| accuracy, string match | 81.4 % | 82.6 % | 22 / 28 (p = 0.48) |
+| accuracy, Math-Verify | 85.2 % | 86.2 % | 23 / 28 (p = 0.58) |
+| accuracy, LLM judge | 84.6 % | 85.8 % | 23 / 29 (p = 0.49) |
+| cut off at 12,288 tokens | 64 | 60 | |
+| mean / median completion tokens | 3,764 / 2,095 | 3,943 / 2,294 | |
+
+All three scorers agree: the gain of about one point is within noise. Of the 22 problems
+only SFT solves (string match), V1 loses 19 by running out of tokens; of the 28 only V1
+solves, the SFT model had run out on 23.
+Results: `../evaluate/results/qwen3-8b-v3-full-offload-2gpu-rest-grpo-v2-global_step_200/`.
+
+### 6.2 Known properties
 
 **Measured on the data.** Every annotated SFT target has valid tags, so for the SFT
 model `label_valid` starts at (or near) 1 and the label term is mostly constant. The
 learning signal then comes almost entirely from answer correctness; the label term
 (0.2) mainly guards against losing the tag format (no tags, or invented tags).
 
-The following follow from the definitions and still have to be observed in a run (step-0
-validation, or `rllm.trainer.val_only=true`, gives the SFT baseline for every term):
-
+- **Most groups carry no signal.** The SFT model already answers ~80 % of the questions
+  correctly, so for most questions all 16 answers are right (or all wrong) and the group
+  has zero advantage; in V1 only 9.5 % of the groups got a gradient from the policy
+  loss. Filtering out questions the SFT model always (or never) solves would spend the
+  compute on the informative ones.
 - **Group normalisation amplifies small differences.** This cuts both ways:
-  - When all 8 answers to a question are equally right or wrong, only the label terms
+  - When all answers to a question are equally right or wrong, only the label terms
     differ, and dividing by the small group σ scales those differences up to unit-size
     advantages. With a binary label term this only happens when some answers lose their
     tags; otherwise the group is uniform and contributes nothing.
   - The same scaling also amplifies noise.
   - `NORM_ADV_BY_STD=false` turns the scaling off.
-- **Uniform groups are wasted compute.** Groups with identical rewards have zero
-  advantage, and cut-off answers are generated but never trained on. `batch/truncated`
-  and `groups/num_trajs_after_filter` show how often it happens.
+- **Truncation is neither rewarded nor penalised.** Dropping cut-off answers (DAPO's
+  overlong filtering) avoids punishing reasoning that was on track but long, and avoids
+  a push toward shorter reasoning. Nothing pushes the model to finish within 8,192 tokens
+  either, and in V1 the share of cut-off validation answers rose from 15.2 % to 18.8 %.
+  A soft overlong penalty (DAPO) would counter that.
 - **`tag_rate` is not rewarded.** According to the model card, the SFT model already
   used the tags in all 500 MATH-500 outputs; `batch/tag_rate` and
   `batch/invented_tag_rate` show whether that holds during training.
 - **The label term is easy to satisfy.** One valid tag anywhere in the thought earns it.
   Nothing checks that a tag fits its paragraph, which labels are used, how often, or in
   what order; a thought tagged `[logical_deduction]` throughout scores the same as a
-  natural mix. `batch/label_mix` and the `share_<label>` metrics show whether the mix
-  drifts.
-- **Truncation is neither rewarded nor penalised.** Dropping cut-off answers (DAPO's
-  overlong filtering) avoids punishing reasoning that was on track but long, and avoids
-  a push toward shorter reasoning. Nothing pushes the model to finish within 8,192 tokens
-  either, so answer length can drift upward; `batch/truncated` and the response length
-  show whether it does. `MASK_TRUNCATED=false` restores the old rule (cut off = 0).
+  natural mix. Only the KL term keeps the mix near the SFT model's; `batch/label_mix`
+  and the `share_<label>` metrics show whether it drifts.
 - **Untagged paragraphs are not penalised.** As long as at least one tag is there and
   none is invalid, untagged paragraphs cost nothing (`tag_rate` shows how many there
   are). An answer with no tags at all loses the label term: if it is right it scores
   0.8, still well above a well-tagged wrong answer (0.2).
-  A group whose 8 answers are all untagged and equally right gets no signal towards the
+  A group whose answers are all untagged and equally right gets no signal towards the
   tags. Enforcing the tag format by rule at generation time (constrained decoding) would
   close this without a reward term.
 - **Regeneration hides the format errors from training.** Rejected samples are never
@@ -359,8 +470,12 @@ validation, or `rllm.trainer.val_only=true`, gives the SFT baseline for every te
   math_verify equivalences that `../../train/evaluate/eval_math500.py` (string and number
   matching only) rejects, so training accuracy can read higher than offline accuracy on
   the same answers.
+- **The reference answers are R1's.** A rest_grpo answer is the final answer of
+  DeepSeek-R1's solution in Bespoke-Stratos, not an independently verified ground truth.
 - **Sparse, sequence-level credit.** Every token of an answer gets the same advantage;
   there is no per-step signal for individual tags.
+- **Only the last checkpoint is kept.** With `max_actor_ckpt_to_keep=1` an earlier,
+  better step cannot be recovered after the run.
 
 Open design question: what "follow the annotated labels" should mean.
 
@@ -372,3 +487,16 @@ Open design question: what "follow the annotated labels" should mean.
   example a classifier trained on the ~200k labelled spans in `bespoke-v2`.
 - **(c) Controllable generation.** The prompt specifies a label plan or allowed label set,
   and the reward checks compliance.
+
+## 7. Before V1
+
+Trial runs that led to V1; none is a version.
+
+| run | setup | outcome |
+|---|---|---|
+| 1-GPU runs on `grpo_try` (9 questions) | pipeline tests: reward, truncation masking, full-parameter training with FSDP2 CPU offload, checkpointing | the step-10 checkpoint crash that `docker/patch_verl.py` fixes; few steps with any signal |
+| `qwen3-8b-v3-full-offload-2gpu-rest-grpo-v1` (wandb `b06lttf5`) | as V1 except: 12 questions × 8 answers per step (96), 6 questions per update, `ACTOR_LR=1e-6`, `KL_BETA=0.001` | pass@1 80.8 % → 81.2 %, cut off 15.4 % → 15.2 %; but the label mix drifted: `reflecting` 21.7 % → 36.1 %, `verifying` 11.6 % → 6.3 %, `label_mix` 0.744 → 0.682; KL 4.6e-3 at step 200; 7.9 min per step; 120 / 200 steps with signal, 8.3 % of groups |
+
+V1 changed from the second trial: `KL_BETA` 0.001 → 0.01 (the label drift), group size
+8 → 16 (more groups that mix right and wrong answers), `ACTOR_LR` 1e-6 → 2e-6 (accuracy
+had not moved), 8 questions per step (128 answers) and 4 per update.

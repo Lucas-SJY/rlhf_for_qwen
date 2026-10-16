@@ -8,6 +8,8 @@
 # same torch / transformers versions), the same card type and the same EVAL_* settings
 # as ../../train/evaluate/k8s/eval-job.yaml. That keeps the scores directly comparable
 # with the SFT v3 baseline evaluated there (accuracy_string 0.814, accuracy_judge 0.846).
+# Two things may differ: EVAL_GPU_TYPE=l40 runs on an L40 / L40S instead of the RTX A6000,
+# and the Job requests less CPU (below); neither changes the computation.
 #
 # What differs is only where things live: the model is a GRPO export on the RL PVC
 # (../run.sh export), results go to /grpo/eval on that PVC, and the Job and ConfigMap
@@ -24,9 +26,18 @@ spec:
   template:
     spec:
       restartPolicy: Never
-      # Same card as the SFT baseline run: batched greedy generation is not invariant
-      # across GPU types, so the comparison uses the same one. At batch 6 the KV cache
-      # is 10.6G on top of 16.4G of bf16 weights, which a 47G RTX A6000 holds.
+      # By default the same card as the SFT baseline run (RTX A6000): batched greedy
+      # generation is not bit-identical across GPU types, so the closest comparison uses
+      # the same one. At batch 6 the KV cache is 10.6G on top of 16.4G of bf16 weights,
+      # which a 47G RTX A6000 or a 48G L40 holds.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: nvidia.com/gpu.product
+                    operator: In
+                    values: ${EVAL_GPU_PRODUCTS}
       imagePullSecrets:
         - name: nrp-registry
       containers:
@@ -67,15 +78,18 @@ spec:
             # 0 runs all 500; EVAL_LIMIT=20 ./evaluate/run_eval.sh for a smoke test.
             - name: EVAL_LIMIT
               value: "${EVAL_LIMIT}"
+          # Generation is GPU-bound: one Python thread launches the kernels, so about one
+          # core is enough, and 48 GB nodes often have a free card but little unrequested
+          # CPU. EVAL_CPU sets the request; NRP allows a limit of at most 1.2 x the request.
           resources:
             requests:
-              nvidia.com/rtxa6000: 1
-              cpu: "4"
+              ${EVAL_GPU_RESOURCE}: 1
+              cpu: ${EVAL_CPU_REQUEST}
               memory: 32Gi
               ephemeral-storage: 10Gi
             limits:
-              nvidia.com/rtxa6000: 1
-              cpu: "4"
+              ${EVAL_GPU_RESOURCE}: 1
+              cpu: ${EVAL_CPU_LIMIT}
               memory: 32Gi
               ephemeral-storage: 10Gi
           volumeMounts:

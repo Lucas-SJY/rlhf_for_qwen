@@ -12,8 +12,8 @@
 #   ./run.sh logs         follow the training Job's logs
 #   ./run.sh status       jobs, pods and recent events
 #   ./run.sh export       convert the latest checkpoint to a HF model (CPU Job) and follow it
-#   ./run.sh answer       answer ANSWER_TASKS with that export and the SFT model (GPU Job),
-#                         then copy the scored answers to ./answers/<RUN_NAME>/
+#   ./run.sh answer       answer ANSWER_TASKS with that export and the SFT model (GPU Job
+#                         on ANSWER_GPU_TYPE), then copy the scored answers to ./answers/<RUN_NAME>/
 #   ./run.sh fetch-answers  only that copy
 #   ./run.sh clean        delete the training, export and answer Jobs (Secrets and PVCs are kept)
 #
@@ -48,20 +48,27 @@ N_GPUS="${N_GPUS:-1}"
 # GPU_TYPE picks the card. Without GPU_PRIORITY_CLASS in .env, a100 runs at priority
 # "opportunistic", which bypasses the GPU quota but can be preempted at any time; set
 # GPU_PRIORITY_CLASS= (empty) to run at normal priority within the namespace's A100 quota.
+# gpu_vars TYPE sets GPU_RESOURCE and GPU_PRODUCTS for that card type.
+gpu_vars() {
+  case "$1" in
+    l40) GPU_RESOURCE=nvidia.com/gpu GPU_PRODUCTS="[NVIDIA-L40, NVIDIA-L40S]" ;;
+    a6000) GPU_RESOURCE=nvidia.com/rtxa6000 GPU_PRODUCTS="[NVIDIA-RTX-A6000]" ;;
+    a100) GPU_RESOURCE=nvidia.com/a100 GPU_PRODUCTS="[NVIDIA-A100-SXM4-80GB, NVIDIA-A100-80GB-PCIe]" ;;
+    *)
+      echo "error: a GPU type must be l40, a6000 or a100 (got '$1')" >&2
+      exit 1
+      ;;
+  esac
+}
 GPU_TYPE="${GPU_TYPE:-l40}"
-case "${GPU_TYPE}" in
-  l40) GPU_RESOURCE=nvidia.com/gpu GPU_PRODUCTS="[NVIDIA-L40, NVIDIA-L40S]" ;;
-  a6000) GPU_RESOURCE=nvidia.com/rtxa6000 GPU_PRODUCTS="[NVIDIA-RTX-A6000]" ;;
-  a100)
-    GPU_RESOURCE=nvidia.com/a100 GPU_PRODUCTS="[NVIDIA-A100-SXM4-80GB, NVIDIA-A100-80GB-PCIe]"
-    GPU_PRIORITY_CLASS="${GPU_PRIORITY_CLASS-opportunistic}"
-    ;;
-  *)
-    echo "error: GPU_TYPE must be l40, a6000 or a100 (got '${GPU_TYPE}')" >&2
-    exit 1
-    ;;
-esac
+gpu_vars "${GPU_TYPE}"
+if [ "${GPU_TYPE}" = a100 ]; then
+  GPU_PRIORITY_CLASS="${GPU_PRIORITY_CLASS-opportunistic}"
+fi
 GPU_PRIORITY_CLASS="${GPU_PRIORITY_CLASS:-}"
+# The answer Job only runs inference: the 8B model in bf16 plus its KV cache fits a 48 GB
+# card, so it runs on ANSWER_GPU_TYPE at normal priority and leaves the A100s to training.
+ANSWER_GPU_TYPE="${ANSWER_GPU_TYPE:-a6000}"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 BESPOKE_DIR="${BESPOKE_DIR:-../train/bespoke-v2}"
 SFT_SPLIT_DIR="${SFT_SPLIT_DIR:-../train/data_labeled_2}"
@@ -212,13 +219,22 @@ step_answer() {
   log "Refreshing ConfigMap ${JOB_NAME}-answer-tasks from ${ANSWER_TASKS}"
   "${KUBECTL[@]}" delete configmap "${JOB_NAME}-answer-tasks" --ignore-not-found
   "${KUBECTL[@]}" create configmap "${JOB_NAME}-answer-tasks" --from-file=tasks.jsonl="${ANSWER_TASKS}"
-  log "Submitting Job ${JOB_NAME}-answer"
+  log "Submitting Job ${JOB_NAME}-answer on one ${ANSWER_GPU_TYPE}"
   "${KUBECTL[@]}" delete job "${JOB_NAME}-answer" --ignore-not-found
+  # render reads these locals in place of the training card's settings.
+  local GPU_RESOURCE GPU_PRODUCTS GPU_PRIORITY_CLASS=""
+  gpu_vars "${ANSWER_GPU_TYPE}"
   render "${APP_DIR}/k8s/answer-job.yaml" | "${KUBECTL[@]}" apply -f -
   follow_job "${JOB_NAME}-answer"
   local pod phase
   pod="$(job_pod "${JOB_NAME}-answer")"
-  phase="$("${KUBECTL[@]}" get pod "${pod}" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+  # The log stream ends when the process exits, a few seconds before the pod's phase
+  # leaves Running.
+  for _ in $(seq 1 24); do
+    phase="$("${KUBECTL[@]}" get pod "${pod}" -o jsonpath='{.status.phase}' 2>/dev/null || true)"
+    [ "${phase}" = "Running" ] || break
+    sleep 5
+  done
   if [ "${phase}" != "Succeeded" ]; then
     echo "error: the answer Job ended ${phase:-without a pod}; see its log above" >&2
     exit 1

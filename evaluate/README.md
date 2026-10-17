@@ -9,7 +9,7 @@ is also scored with Hugging Face Math-Verify and the LLM judge (see Scoring).
 
 | | here and in `../../train/evaluate` |
 |---|---|
-| scripts | `eval_math500.py` and `judge_answers.py` are byte-identical copies; `math_verify_answers.py` is new |
+| scripts | `eval_math500.py` and `judge_answers.py` as there, plus support for datasets without MATH-500's id, subject and level fields; `math_verify_answers.py` is new |
 | image | the SFT training image (`context-comp-sft:latest`: torch 2.9.1, transformers 5.15) |
 | dataset | `HuggingFaceH4/MATH-500`, split `test`, all 500 problems |
 | prompt | `Return your final response within \boxed{}.` + problem, chat template, thinking on |
@@ -56,6 +56,25 @@ fetched results.
 
 - `EVAL_LIMIT=20 ./evaluate/run_eval.sh` is a smoke test; `never_closed_think` and
   `no_boxed_answer` should be near zero before a full run.
+- `EVAL_DATASET` / `EVAL_SPLIT` evaluate on another Hugging Face dataset whose rows have
+  `problem` and `answer`, with the same prompt, decoding and scorers; results go to
+  `results/<dataset name>/<run>-global_step_<N>/`. A row without MATH-500's `unique_id` is
+  named `<split>/<index>`; `subject` and `level` are optional. For example the first 20
+  BeyondAIME problems (integer answers):
+  `EVAL_DATASET=ByteDance-Seed/BeyondAIME EVAL_LIMIT=20 ./evaluate/run_eval.sh submit`,
+  then `fetch` with the same variables. `EVAL_DATASET_CONFIG` picks a config (subset).
+- `EVAL_SUITE` runs several datasets in one Job, loading the model once: entries
+  `dataset|config|split` separated by `;`. Each goes to
+  `results/<dataset name>[-<config>]/<EVAL_RUN_NAME>/`; `fetch` and `score` handle every
+  entry, and a dataset that fails does not stop the others. The SFT v3 run on seven
+  olympiad sets (first 20 problems each):
+
+  ```bash
+  export EVAL_MODEL=/grpo/hf/hub/models--Lucas-SJY--qwen3-8b-sft-bespoke/snapshots/e24173c027eefa9e976908041d6f7858cb1e8634
+  export EVAL_RUN_NAME=qwen3-8b-sft-v3 EVAL_LIMIT=20
+  export EVAL_SUITE="ByteDance-Seed/BeyondAIME||test;KbsdJames/Omni-MATH||test;RUC-AIBOX/OlymMATH|en-hard|test;MathArena/hmmt_feb_2025||train;MathArena/hmmt_feb_2026||train;math-ai/aime25||test;MathArena/aime_2026||train"
+  ./evaluate/run_eval.sh submit      # later, with the same variables: fetch
+  ```
 - `EVAL_RUN_NAME` overrides the result directory name.
 - The other subcommands are those of `../../train/evaluate/run_eval.sh`: `code`, `submit`,
   `logs`, `status`, `fetch`, `clean`; plus `score`.

@@ -56,7 +56,14 @@ spec:
             - name: EVAL_RUN_NAME
               value: ${EVAL_RUN_NAME}
             - name: EVAL_DATASET
-              value: HuggingFaceH4/MATH-500
+              value: ${EVAL_DATASET}
+            - name: EVAL_DATASET_CONFIG
+              value: "${EVAL_DATASET_CONFIG}"
+            - name: EVAL_SPLIT
+              value: ${EVAL_SPLIT}
+            # Several datasets in one run ('dataset|config|split;...'); empty: EVAL_DATASET.
+            - name: EVAL_SUITE
+              value: "${EVAL_SUITE}"
             - name: EVAL_OUTPUT_DIR
               value: /grpo/eval
             # As in ../train: 6 fits a 47G card; 12 OOMed there 13 hours into a run.

@@ -33,7 +33,7 @@ from pathlib import Path
 # Only these are read out of .env. Sourcing the whole file into a local shell also
 # imports container paths like HF_HOME=/data/hf, which then makes anything that
 # touches the HF cache fail with "Read-only file system: '/data'".
-ENV_KEYS = ("OPENAI_BASE_URL", "OPENAI_API_KEY", "EVAL_JUDGE_MODEL", "EVAL_DATASET", "EVAL_SPLIT")
+ENV_KEYS = ("OPENAI_BASE_URL", "OPENAI_API_KEY", "EVAL_JUDGE_MODEL", "EVAL_DATASET", "EVAL_DATASET_CONFIG", "EVAL_SPLIT")
 
 
 def load_env_file(path: Path) -> None:
@@ -61,9 +61,12 @@ def parse_args() -> argparse.Namespace:
     load_env_file(Path(__file__).resolve().parent.parent / ".env")
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--run-dir", required=True, help="eval output directory holding predictions.jsonl")
-    p.add_argument("--dataset", default=env("EVAL_DATASET", "HuggingFaceH4/MATH-500"),
-                   help="source of the problem statements, matched back by unique_id")
-    p.add_argument("--split", default=env("EVAL_SPLIT", "test"))
+    p.add_argument("--dataset", default=None,
+                   help="source of the problem statements, matched back by unique_id "
+                        "(<split>/<index> for a dataset without one, as in eval_math500.py); "
+                        "default: the run's summary.json, else EVAL_DATASET, else MATH-500")
+    p.add_argument("--config", default=None, help="the dataset's config; default as for --dataset")
+    p.add_argument("--split", default=None, help="default as for --dataset")
     p.add_argument("--model", default=env("EVAL_JUDGE_MODEL", "qwen3-small"),
                    help="model id as the gateway knows it, not the upstream name: on NRP "
                         "'qwen3' routes to Qwen/Qwen3.8-Flash-Next-FP8. List what is available "
@@ -152,12 +155,22 @@ def main() -> None:
         sys.exit(f"no predictions.jsonl under {run_dir}")
     records = [json.loads(l) for l in pred_path.open()]
 
+    # Which dataset the run used: eval_math500.py records it in summary.json.
+    run_summary = json.loads((run_dir / "summary.json").read_text()) if (run_dir / "summary.json").is_file() else {}
+    if args.dataset is None:
+        args.dataset = run_summary.get("dataset_name") or env("EVAL_DATASET", "HuggingFaceH4/MATH-500")
+    if args.config is None:
+        args.config = run_summary.get("dataset_config") or env("EVAL_DATASET_CONFIG", "")
+    if args.split is None:
+        args.split = run_summary.get("dataset_split") or env("EVAL_SPLIT", "test")
+
     from datasets import load_dataset
-    data = load_dataset(args.dataset, split=args.split)
-    problems = {r["unique_id"]: r["problem"] for r in data}
+    data = load_dataset(args.dataset, args.config or None, split=args.split)
+    problems = {(r.get("unique_id") or f"{args.split}/{i}"): r["problem"] for i, r in enumerate(data)}
 
     todo = [r for r in records if args.mode == "all" or not r["correct"]]
     print(f"[judge] model    : {args.model} @ {args.base_url}")
+    print(f"[judge] dataset  : {args.dataset}{f' ({args.config})' if args.config else ''} [{args.split}]")
     print(f"[judge] records  : {len(records)}  to judge: {len(todo)} ({args.mode})", flush=True)
 
     started = time.time()

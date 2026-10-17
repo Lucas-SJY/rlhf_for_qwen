@@ -13,6 +13,17 @@ directory under it. Nothing in the training pipeline is touched.
 The scorer is dependency-free on purpose. sympy.parsing.latex needs antlr, which the
 training image does not have, so answers are compared with LaTeX normalisation plus a
 numeric fallback instead.
+
+Other datasets work when their rows have `problem` and `answer` (EVAL_DATASET, with
+EVAL_DATASET_CONFIG for one that has configs, e.g. ByteDance-Seed/BeyondAIME or
+RUC-AIBOX/OlymMATH en-hard). MATH-500's `unique_id`, `subject` and `level` are optional:
+a row without `unique_id` is named `<split>/<index>`, and an answer that is a number is
+compared as its text.
+
+EVAL_SUITE evaluates several datasets in one run, loading the model once: entries
+`dataset|config|split` separated by `;` (config may be empty). Each goes to
+<output-dir>/<dataset name>[-<config>]/<run-name>/, as a single run of it would with
+that run name; a dataset that fails is reported and the rest still run.
 """
 
 from __future__ import annotations
@@ -47,6 +58,10 @@ def parse_args() -> argparse.Namespace:
                    help="local path or HF repo id; point it at the base model to get a baseline")
     p.add_argument("--dataset", default=env("EVAL_DATASET", "HuggingFaceH4/MATH-500"))
     p.add_argument("--split", default=env("EVAL_SPLIT", "test"))
+    p.add_argument("--dataset-config", default=env("EVAL_DATASET_CONFIG", ""),
+                   help="the dataset's config (subset) name, for datasets that have several")
+    p.add_argument("--suite", default=env("EVAL_SUITE", ""),
+                   help="several datasets as 'dataset|config|split;...'; overrides --dataset")
     p.add_argument("--output-dir", default=env("EVAL_OUTPUT_DIR", "/data/eval"))
     p.add_argument("--run-name", default=env("EVAL_RUN_NAME", ""), help="defaults to the model directory name")
     p.add_argument("--limit", type=int, default=env("EVAL_LIMIT", 0), help="only the first N problems, 0 means all")
@@ -149,6 +164,11 @@ def split_answer(text: str) -> tuple[str, str, bool]:
     return text, "", False
 
 
+def row_id(row: dict, index: int, split: str) -> str:
+    """MATH-500's unique_id, else <split>/<index> (judge_answers.py names rows the same way)."""
+    return row.get("unique_id") or f"{split}/{index}"
+
+
 def is_correct(pred: str | None, gold: str) -> bool:
     if pred is None:
         return False
@@ -165,17 +185,33 @@ def is_correct(pred: str | None, gold: str) -> bool:
 # generation
 # ---------------------------------------------------------------------------
 
+def dataset_dir_name(dataset: str, config: str) -> str:
+    """BeyondAIME, OlymMATH-en-hard: the directory a suite entry's results go under."""
+    return dataset.rstrip("/").split("/")[-1] + (f"-{config}" if config else "")
+
+
+def suite_entries(args, run_name: str) -> list[tuple[str, str, str, Path]]:
+    """(dataset, config, split, output directory) for each dataset to evaluate."""
+    if not args.suite.strip():
+        return [(args.dataset, args.dataset_config, args.split, Path(args.output_dir) / run_name)]
+    entries = []
+    for item in args.suite.split(";"):
+        if not item.strip():
+            continue
+        parts = [x.strip() for x in item.split("|")] + ["", ""]
+        dataset, config, split = parts[0], parts[1], parts[2] or "test"
+        entries.append((dataset, config, split, Path(args.output_dir) / dataset_dir_name(dataset, config) / run_name))
+    return entries
+
+
 def main() -> None:
     args = parse_args()
     torch.manual_seed(args.seed)
 
     run_name = args.run_name or Path(args.model.rstrip("/")).name
-    out_dir = Path(args.output_dir) / run_name
-    out_dir.mkdir(parents=True, exist_ok=True)
+    entries = suite_entries(args, run_name)
 
-    print(f"[eval] model      : {args.model}")
-    print(f"[eval] dataset    : {args.dataset} [{args.split}]")
-    print(f"[eval] output     : {out_dir}", flush=True)
+    print(f"[eval] model      : {args.model}", flush=True)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, trust_remote_code=True)
     if tokenizer.pad_token_id is None:
@@ -189,7 +225,26 @@ def main() -> None:
     model.to("cuda" if torch.cuda.is_available() else "cpu")
     model.config.use_cache = True
 
-    data = load_dataset(args.dataset, split=args.split)
+    failed = []
+    for dataset, config, split, out_dir in entries:
+        try:
+            evaluate(args, tokenizer, model, dataset, config, split, out_dir)
+        except Exception as exc:  # one broken dataset must not cost the others' hours
+            if len(entries) == 1:
+                raise
+            failed.append(dataset)
+            print(f"[eval] FAILED {dataset} [{config or '-'}|{split}]: {type(exc).__name__}: {exc}", flush=True)
+    if failed:
+        raise SystemExit(f"[eval] {len(failed)} of {len(entries)} datasets failed: {', '.join(failed)}")
+
+
+def evaluate(args, tokenizer, model, dataset: str, config: str, split: str, out_dir: Path) -> None:
+    """Generate and string-score one dataset; writes summary.json and predictions.jsonl."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"[eval] dataset    : {dataset}{f' ({config})' if config else ''} [{split}]")
+    print(f"[eval] output     : {out_dir}", flush=True)
+
+    data = load_dataset(dataset, config or None, split=split)
     if args.limit:
         data = data.select(range(min(args.limit, len(data))))
     print(f"[eval] problems   : {len(data)}", flush=True)
@@ -233,11 +288,13 @@ def main() -> None:
                        if closed else int(keep.numel()))
             pred = extract_boxed(answer_part) if answer_part.strip() else None
 
-            ok = is_correct(pred, row["answer"])
+            gold = str(row["answer"])
+            ok = is_correct(pred, gold)
             n_correct += ok
             records.append({
-                "unique_id": row["unique_id"], "subject": row["subject"], "level": row["level"],
-                "gold": row["answer"], "pred": pred, "correct": bool(ok),
+                "unique_id": row_id(row, start + j, split),
+                "subject": row.get("subject", ""), "level": row.get("level", ""),
+                "gold": gold, "pred": pred, "correct": bool(ok),
                 "completion_tokens": int(keep.numel()),
                 "thinking_tokens": n_think,
                 "answer_tokens": int(keep.numel()) - n_think,
@@ -255,12 +312,17 @@ def main() -> None:
     toks = sorted(r["completion_tokens"] for r in records)
     by_level, by_subject = {}, {}
     for r in records:
-        by_level.setdefault(r["level"], []).append(r["correct"])
-        by_subject.setdefault(r["subject"], []).append(r["correct"])
+        if r["level"] != "":
+            by_level.setdefault(r["level"], []).append(r["correct"])
+        if r["subject"]:
+            by_subject.setdefault(r["subject"], []).append(r["correct"])
 
     summary = {
         "model": args.model,
-        "dataset": f"{args.dataset}[{args.split}]",
+        "dataset": f"{dataset}[{split}]" if not config else f"{dataset}({config})[{split}]",
+        "dataset_name": dataset,
+        "dataset_config": config,
+        "dataset_split": split,
         "n": len(records),
         "accuracy": n_correct / len(records) if records else 0.0,
         "completion_tokens_mean": sum(toks) / len(toks) if toks else 0,

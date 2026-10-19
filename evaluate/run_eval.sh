@@ -29,7 +29,9 @@
 # EVAL_RUN_NAME names the result directory (default <run>-global_step_<N>, below the
 # dataset's directory for a dataset other than MATH-500),
 # EVAL_LIMIT=20 makes a smoke test of the first 20 problems, and EVAL_GPU_TYPE picks the
-# card: a6000 (default, the SFT baseline's) or l40 (L40 / L40S, also 48 GB). EVAL_CPU is
+# card: a6000 (default, the SFT baseline's) or l40 (L40 / L40S, also 48 GB).
+# EVAL_TEMPERATURE / EVAL_TOP_P / EVAL_TOP_K set the decoding: default greedy (0), as the
+# baseline; Qwen3's thinking-mode recommendation is 0.6 / 0.95 / 20. EVAL_CPU is
 # the CPU request in millicores (default 1000); the limit is 1.2 x that, NRP's maximum.
 #
 # Reads ../.env for IMAGE, K8S_NAMESPACE, RUN_NAME and RL_PVC_NAME but never writes to
@@ -95,6 +97,9 @@ result_dirs() {
   done
 }
 EVAL_LIMIT="${EVAL_LIMIT:-0}"
+EVAL_TEMPERATURE="${EVAL_TEMPERATURE:-0}"
+EVAL_TOP_P="${EVAL_TOP_P:-1.0}"
+EVAL_TOP_K="${EVAL_TOP_K:-0}"
 EVAL_GPU_TYPE="${EVAL_GPU_TYPE:-a6000}"
 case "${EVAL_GPU_TYPE}" in
   a6000) EVAL_GPU_RESOURCE=nvidia.com/rtxa6000 EVAL_GPU_PRODUCTS="[NVIDIA-RTX-A6000]" ;;
@@ -126,6 +131,9 @@ step_submit() {
       -e "s|\${EVAL_MODEL}|${EVAL_MODEL}|g" \
       -e "s|\${EVAL_RUN_NAME}|${EVAL_RUN_NAME}|g" \
       -e "s|\${EVAL_LIMIT}|${EVAL_LIMIT}|g" \
+      -e "s|\${EVAL_TEMPERATURE}|${EVAL_TEMPERATURE}|g" \
+      -e "s|\${EVAL_TOP_P}|${EVAL_TOP_P}|g" \
+      -e "s|\${EVAL_TOP_K}|${EVAL_TOP_K}|g" \
       -e "s|\${EVAL_DATASET}|${EVAL_DATASET}|g" \
       -e "s|\${EVAL_DATASET_CONFIG}|${EVAL_DATASET_CONFIG}|g" \
       -e "s#\${EVAL_SUITE}#${EVAL_SUITE}#g" \

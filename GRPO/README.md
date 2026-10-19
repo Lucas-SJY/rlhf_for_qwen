@@ -242,16 +242,20 @@ GRPO/
 │   ├── prepare_grpo_try.py  ../grpo_try -> data/grpo_try/{train,validation}.jsonl
 │   ├── prepare_rest_grpo.py bespoke-stratos-rest (non-SFT questions) -> data/rest_grpo/,
 │   │                        unanswerable ones -> ../no_answer/
+│   ├── prepare_omni_math.py Omni-MATH (Hugging Face) -> data/omni_math/ (V2)
 │   ├── compute_label_prior.py  bespoke-v2 -> target label mix of the reward (LABEL_PRIOR)
-│   ├── train_grpo.py        Hydra entry point: datasets, Ray, rLLM AgentTrainer(backend="verl")
+│   ├── train_grpo.py        Hydra entry point: datasets, Ray, rLLM AgentTrainer(backend="verl");
+│   │                        passes the rllm.rollout.* sampling keys verl's engine drops
+│   │                        (presence_penalty, min_p) to the workflow
 │   ├── entrypoint.sh        env -> Hydra overrides -> train_grpo.py
 │   ├── export_policy.py     verl checkpoint -> merged HF model
 │   ├── answer_tasks.py      answer a task file with several models, score every answer
 │   └── labelcot/
 │       ├── reward.py        the label-following reward (stdlib only)
-│       ├── workflow.py      rLLM Workflow: SFT-identical prompt, generation, scoring
+│       ├── workflow.py      rLLM Workflow: SFT-identical prompt, generation (rLLM's
+│       │                    sampling params plus those extra keys), scoring
 │       └── patches.py       final checkpoint for rLLM's verl backend
 ├── tests/                 test_reward.py, test_prepare_grpo_try.py, test_prepare_rest_grpo.py,
-│                          test_workflow.py, test_answer_tasks.py
+│                          test_prepare_omni_math.py, test_workflow.py, test_answer_tasks.py
 └── data/                    generated, gitignored, baked into the image
 ```

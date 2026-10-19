@@ -52,8 +52,10 @@ class FakeEngine:
         self.val_sampling_params = {"temperature": 0.6}
         self.is_validation = False
         self.weight_version = 7
+        self.sampling_seen = []
 
     async def get_token_output_from_token_input(self, token_input, application_id, **sampling):
+        self.sampling_seen.append(sampling)
         text = self.completions[min(self.calls, len(self.completions) - 1)]
         self.calls += 1
         return text
@@ -114,6 +116,31 @@ class LabelRetryTest(unittest.TestCase):
         bare = {k: v for k, v in TASK.items() if k != "prompt"}
         engine, _, _ = run_workflow([VALID], task=bare)
         self.assertEqual(engine.tokenizer.seen[-1], [{"role": "user", "content": TASK["question"]}])
+
+    def test_extra_sampling_params_reach_the_engine(self):
+        extra = {"train": {"presence_penalty": 1.0, "min_p": 0.0}, "val": {"presence_penalty": 0.5}}
+        for validation, expected in ((False, {"temperature": 1.0, "presence_penalty": 1.0, "min_p": 0.0}),
+                                     (True, {"temperature": 0.6, "presence_penalty": 0.5})):
+            engine = FakeEngine([VALID])
+            engine.is_validation = validation
+            workflow = LabeledCoTWorkflow(engine, executor=None, extra_sampling=extra)
+            asyncio.run(workflow.run_with_termination_handling(TASK, "q1:0"))
+            self.assertEqual(engine.sampling_seen, [expected])
+
+
+@unittest.skipUnless(LabeledCoTWorkflow is not None, "needs rLLM")
+class ExtraSamplingParamsTest(unittest.TestCase):
+    def test_keys_the_verl_engine_drops_are_passed_on(self):
+        from omegaconf import OmegaConf
+
+        from train_grpo import extra_sampling_params
+
+        config = OmegaConf.create({"rllm": {"rollout": {
+            "train": {"temperature": 0.6, "top_p": 0.95, "top_k": 20, "max_tokens": 8192, "min_p": 0.0, "presence_penalty": 1.0},
+            "val": {"temperature": 0.6, "top_p": 0.95, "max_tokens": 8192},
+        }}})
+        self.assertEqual(extra_sampling_params(config),
+                         {"train": {"min_p": 0.0, "presence_penalty": 1.0}, "val": {}})
 
 
 if __name__ == "__main__":

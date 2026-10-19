@@ -12,9 +12,33 @@ answer. The image bakes in `GRPO/data/`, so a changed task set needs `./run.sh i
 |---|---|---|---|---|---|
 | bespoke-v2 | `GRPO/data/{train,validation}.jsonl` | 5,042 | 102 | `GRPO/src/prepare_data.py` | the SFT questions themselves; default when `TRAIN_FILE` is unset |
 | grpo_try | `GRPO/data/grpo_try/` | 6 | 3 | `GRPO/src/prepare_grpo_try.py` | 9 hand-picked questions, for pipeline tests |
-| **rest_grpo** | `GRPO/data/rest_grpo/` | **4,776** | **526** | `GRPO/src/prepare_rest_grpo.py` | Bespoke-Stratos questions not used in SFT, one checkable answer each; **used by the current runs** |
+| rest_grpo | `GRPO/data/rest_grpo/` | 4,776 | 526 | `GRPO/src/prepare_rest_grpo.py` | Bespoke-Stratos questions not used in SFT, one checkable answer each; used by V1 |
+| **omni_math** | `GRPO/data/omni_math/` | **3,153** | **350** | `GRPO/src/prepare_omni_math.py` | Omni-MATH olympiad problems with one checkable answer, without the 20 evaluated ones; **used by V2** |
 | no_answer | `no_answer/` | 5,623 | 631 | `GRPO/src/prepare_rest_grpo.py` | split off from rest_grpo: no checkable answer; not trained on (gitignored) |
 | manual_inspection | `manual_inspection/` | 10 | – | `GRPO/src/prepare_rest_grpo.py` | held out from rest_grpo training for reading; never trained on (gitignored) |
+
+## omni_math
+
+Built from `KbsdJames/Omni-MATH` on Hugging Face (one `test` split, 4,428 problems with
+`problem`, `answer`, `solution`, `domain`, `difficulty` 1-10, `source`):
+
+| Destination | Problems |
+|---|---|
+| **omni_math** (3,153 train / 350 validation, seeded 10 % split) | **3,503** |
+| left out: the first 20 rows, the slice `evaluate/` scores (`EVAL_LIMIT=20`) | 20 |
+| left out: answer not checkable (proofs, yes/no, prose, longer than 40 characters) | 781 |
+| left out: several answers (a top-level list such as `2, 3` or `(2, 1), (3, 1)`, or a solution that boxes more than one value) | 124 |
+| **Total** | **4,428** |
+
+- Each question is `Return your final response within \boxed{}.` + the problem, as in SFT
+  and rest_grpo; ids are `omni_<row index>`.
+- Answers are unwrapped from `\[ \]`, `$` and an outer `\boxed{}` that some rows carry.
+- List answers are dropped because math_verify accepts one element of a list as the whole
+  answer, so the reward would pay for a partial answer.
+- The first 20 rows are the hardest kind of problem in the set (mean difficulty 7.5 vs 5.0
+  overall: national team selection tests), so they are not representative either way.
+- Built in the GRPO image, which has `datasets`:
+  `docker run --rm -v "$PWD/GRPO:/w" -w /w/src --entrypoint python3 <GRPO image> prepare_omni_math.py --output-dir ../data/omni_math`.
 
 ## rest_grpo
 

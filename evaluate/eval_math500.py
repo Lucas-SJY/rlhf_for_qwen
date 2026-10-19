@@ -69,6 +69,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max-new-tokens", type=int, default=env("EVAL_MAX_NEW_TOKENS", 8192),
                    help="a thinking model emits the whole trace before the answer, so this "
                         "has to cover both or every run truncates mid-thought")
+    p.add_argument("--top-p", type=float, default=env("EVAL_TOP_P", 1.0),
+                   help="nucleus sampling, used only when temperature > 0 (1.0 = off)")
+    p.add_argument("--top-k", type=int, default=env("EVAL_TOP_K", 0),
+                   help="top-k sampling, used only when temperature > 0 (0 = off); Qwen3's "
+                        "thinking-mode recommendation is temperature 0.6, top-p 0.95, top-k 20")
     p.add_argument("--temperature", type=float, default=env("EVAL_TEMPERATURE", 0.0),
                    help="0 means greedy, which keeps the run reproducible")
     p.add_argument("--enable-thinking", default=env("EVAL_ENABLE_THINKING", "true"),
@@ -271,6 +276,8 @@ def evaluate(args, tokenizer, model, dataset: str, config: str, split: str, out_
                 max_new_tokens=args.max_new_tokens,
                 do_sample=args.temperature > 0,
                 temperature=args.temperature if args.temperature > 0 else None,
+                # Explicit, so the checkpoint's generation_config defaults never apply.
+                **({"top_p": args.top_p, "top_k": args.top_k} if args.temperature > 0 else {}),
                 pad_token_id=tokenizer.pad_token_id,
             )
         generated = out[:, enc["input_ids"].shape[1]:]
@@ -338,6 +345,7 @@ def evaluate(args, tokenizer, model, dataset: str, config: str, split: str, out_
         "minutes": (time.time() - started) / 60,
         "max_new_tokens": args.max_new_tokens,
         "temperature": args.temperature,
+        **({"top_p": args.top_p, "top_k": args.top_k} if args.temperature > 0 else {}),
         "enable_thinking": enable_thinking,
     }
 

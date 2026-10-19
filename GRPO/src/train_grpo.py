@@ -33,6 +33,25 @@ def reward_weights_from_env() -> dict[str, float]:
     }
 
 
+# The sampling keys rLLM's verl engine (VerlEngine) reads from the rollout config; it drops
+# every other key of rllm.rollout.{train,val} (rLLM passes those through to the backend
+# only on its AgentFlow path).
+ENGINE_SAMPLING_KEYS = {"temperature", "top_p", "top_k", "max_tokens"}
+
+
+def extra_sampling_params(config) -> dict[str, dict]:
+    """rllm.rollout.train / val keys the verl engine leaves out (presence_penalty, min_p, ...).
+
+    The workflow hands them to get_token_output_from_token_input, which merges them into
+    vLLM's SamplingParams.
+    """
+    from omegaconf import OmegaConf
+
+    rollout = OmegaConf.to_container(config.rllm.rollout, resolve=True)
+    return {mode: {k: v for k, v in (rollout.get(mode) or {}).items() if k not in ENGINE_SAMPLING_KEYS}
+            for mode in ("train", "val")}
+
+
 def load_tasks(path: str) -> list[dict]:
     with open(path) as f:
         return [json.loads(line) for line in f if line.strip()]
@@ -65,10 +84,13 @@ def main(config) -> None:
 
     weights = reward_weights_from_env()
     print(f"[train_grpo] reward weights: {weights}")
+    extra_sampling = extra_sampling_params(config)
+    print(f"[train_grpo] sampling params beyond temperature / top_p / top_k: {extra_sampling}")
 
     trainer = AgentTrainer(
         workflow_class=LabeledCoTWorkflow,
-        workflow_args={"reward_weights": weights, "max_label_retries": int(os.environ.get("MAX_LABEL_RETRIES", "3"))},
+        workflow_args={"reward_weights": weights, "max_label_retries": int(os.environ.get("MAX_LABEL_RETRIES", "3")),
+                       "extra_sampling": extra_sampling},
         config=config,
         train_dataset=train,
         val_dataset=val,

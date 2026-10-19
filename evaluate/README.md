@@ -75,6 +75,11 @@ fetched results.
   export EVAL_SUITE="ByteDance-Seed/BeyondAIME||test;KbsdJames/Omni-MATH||test;RUC-AIBOX/OlymMATH|en-hard|test;MathArena/hmmt_feb_2025||train;MathArena/hmmt_feb_2026||train;math-ai/aime25||test;MathArena/aime_2026||train"
   ./evaluate/run_eval.sh submit      # later, with the same variables: fetch
   ```
+- `EVAL_TEMPERATURE` / `EVAL_TOP_P` / `EVAL_TOP_K` change the decoding (default greedy, as
+  the baseline). Greedy decoding sends Qwen3's thinking mode into repetition loops (40 of
+  the 104 cut-off answers of the run above); Qwen3 recommends temperature 0.6, top-p 0.95,
+  top-k 20, e.g. with `EVAL_RUN_NAME=qwen3-8b-sft-v3-t0.6` so the results sit beside the
+  greedy ones. One sample per problem, so a 20-problem score is noisy.
 - `EVAL_RUN_NAME` overrides the result directory name.
 - The other subcommands are those of `../../train/evaluate/run_eval.sh`: `code`, `submit`,
   `logs`, `status`, `fetch`, `clean`; plus `score`.

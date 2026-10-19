@@ -80,8 +80,13 @@ spec:
               value: expandable_segments:True
             - name: PYTORCH_ALLOC_CONF
               value: expandable_segments:True
+            # 0 = greedy (the baseline's); > 0 samples with EVAL_TOP_P / EVAL_TOP_K.
             - name: EVAL_TEMPERATURE
-              value: "0"
+              value: "${EVAL_TEMPERATURE}"
+            - name: EVAL_TOP_P
+              value: "${EVAL_TOP_P}"
+            - name: EVAL_TOP_K
+              value: "${EVAL_TOP_K}"
             # 0 runs all 500; EVAL_LIMIT=20 ./evaluate/run_eval.sh for a smoke test.
             - name: EVAL_LIMIT
               value: "${EVAL_LIMIT}"

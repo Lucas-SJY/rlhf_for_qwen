@@ -15,6 +15,12 @@ outside the eight labels is thrown away and sampled again, up to ``max_label_ret
 times. Only the kept completion becomes the trajectory; one that still has an invalid
 tag after the last retry gets no label credit in the reward.
 
+Sampling parameters are rLLM's: ``rllm.rollout.train`` / ``rllm.rollout.val``. Its verl
+engine (``VerlEngine``) builds its sampling params from temperature, top_p and top_k
+only; any other key there (presence_penalty, min_p, ...) arrives as ``extra_sampling``
+(train_grpo.py) and is passed to ``get_token_output_from_token_input``, which merges its
+keyword arguments into vLLM's ``SamplingParams``.
+
 A completion cut off by the length limit ends the episode with
 MAX_RESPONSE_LENGTH_EXCEEDED; the trainer's compact filtering drops those episodes from
 the batch (entrypoint.sh, MASK_TRUNCATED), so they are neither rewarded nor penalised.
@@ -35,10 +41,12 @@ apply_patches()
 
 class LabeledCoTWorkflow(Workflow):
     def __init__(self, rollout_engine, executor, reward_weights: dict | None = None,
-                 max_label_retries: int = 3, **kwargs):
+                 max_label_retries: int = 3, extra_sampling: dict | None = None, **kwargs):
         super().__init__(rollout_engine, executor, **kwargs)
         self.reward_weights = RewardWeights(**(reward_weights or {}))
         self.max_label_retries = max(0, int(max_label_retries))
+        # {"train": {...}, "val": {...}}: rllm.rollout.* keys the verl engine leaves out.
+        self.extra_sampling = {mode: dict((extra_sampling or {}).get(mode) or {}) for mode in ("train", "val")}
         self._breakdown: RewardBreakdown | None = None
 
     def reset(self, task: dict | None = None, uid: str | None = None) -> None:
@@ -61,6 +69,7 @@ class LabeledCoTWorkflow(Workflow):
         # engine.validate. Honour both so validation always uses its own sampling params.
         is_validation = bool(getattr(engine, "is_validation", False) or getattr(engine, "validate", False))
         sampling = dict(engine.val_sampling_params if is_validation else engine.train_sampling_params)
+        sampling.update(self.extra_sampling["val" if is_validation else "train"])
 
         # Sample until the thought has no tag outside the eight labels, at most
         # max_label_retries extra times. Rejected samples are discarded, not trained on.

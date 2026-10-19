@@ -89,7 +89,9 @@ All settings live in `.env` (template: `.env.example`).
 | `N_GPUS` | 1 | cards on the one node the pod runs on; the Job requests this many and FSDP shards the actor across them, with one vLLM replica per card |
 | `FSDP_CPU_OFFLOAD`, `OMP_NUM_THREADS` | false, unset | true: FSDP2 with CPU offload. The actor's weights, gradients and Adam state stay in host RAM, layers go to the GPU only while computed, and Adam steps on the CPU with `OMP_NUM_THREADS` threads per worker (Ray's default is 1). Much less GPU memory, slower steps; see [Full-parameter training](#full-parameter-training) |
 | `POD_CPU`, `POD_MEMORY`, `RAY_OBJECT_STORE_GB`, `RAY_NUM_CPUS` | 8, `160Gi`, 16, unset | training pod size, sized for the 8B LoRA run on one card (the 4-card full-parameter run uses 16 / `256Gi`). A small model fits 4 / `64Gi` / 8 and schedules far more easily; with `POD_CPU` below 8 set `RAY_NUM_CPUS=8`, or Ray runs out of CPUs to hand to verl and vLLM |
-| `TRAIN_FILE`, `VAL_FILE` | `/workspace/data/{train,validation}.jsonl` | task files inside the image: bespoke-v2 by default, or [grpo_try](#training-on-grpo_try) / [rest_grpo](#training-on-rest_grpo) (the current runs); all sets and their counts are in [data_distrib.md](data_distrib.md) |
+| `TRAIN_FILE`, `VAL_FILE` | `/workspace/data/{train,validation}.jsonl` | task files inside the image: bespoke-v2 by default, or [grpo_try](#training-on-grpo_try) / [rest_grpo](#training-on-rest_grpo) (V1) / [omni_math](#training-on-omni_math) (V2); all sets and their counts are in [data_distrib.md](data_distrib.md) |
+| `TRAIN_TEMPERATURE`, `TRAIN_TOP_P`, `TRAIN_TOP_K`, `TRAIN_MIN_P`, `TRAIN_PRESENCE_PENALTY` | 1.0, 1.0, -1, 0, 0 | sampling of the training rollouts (rLLM's `rllm.rollout.train`). The defaults sample exactly the policy the actor scores; V2 uses Qwen3's thinking-mode 0.6, 0.95, 20, 0 and a presence penalty of 1.0 against repetition loops. Everything but the temperature changes only vLLM's sampler, so it makes training slightly off-policy |
+| `VAL_TEMPERATURE`, `VAL_TOP_P`, `VAL_TOP_K`, `VAL_MIN_P`, `VAL_PRESENCE_PENALTY` | 0.6, 0.95, 20, 0, 0 | the same for validation (`rllm.rollout.val`) |
 
 ## Full-parameter training
 
@@ -225,6 +227,23 @@ Validation metrics are then logged as `val/rest_grpo/...`. One validation pass o
 526 questions (one answer each, up to 8,192 tokens) took ~25 min on one A100 and ~9 min on
 two; a smaller `VAL_FILE` keeps it cheaper. The SFT checkpoint scores pass@1 0.80–0.83 on
 it before training (three runs), 14–16 % of its answers cut off at the length limit.
+
+## Training on omni_math
+
+`GRPO/data/omni_math/` holds Omni-MATH's olympiad problems with one checkable answer:
+3,153 train / 350 validation, without the 20 problems `evaluate/` scores and without
+proofs, yes/no and list answers (counts in [data_distrib.md](data_distrib.md#omni_math)).
+It is built from the Hugging Face dataset with `GRPO/src/prepare_omni_math.py`, in the
+GRPO image (it needs `datasets`):
+
+```bash
+docker run --rm -v "$PWD/GRPO:/w" -w /w/src --entrypoint python3 "$IMAGE" \
+  prepare_omni_math.py --output-dir ../data/omni_math
+```
+
+V2 trains on it (`TRAIN_FILE=/workspace/data/omni_math/train.jsonl`, `VAL_FILE=.../validation.jsonl`,
+rebuild the image) with the sampling in the table above; its validation metrics are
+`val/omni_math/...`.
 
 ## Answering the held-out questions
 

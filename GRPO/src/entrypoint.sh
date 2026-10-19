@@ -108,8 +108,13 @@ MAX_RESPONSE_LENGTH="${MAX_RESPONSE_LENGTH:-8192}"
 PPO_MAX_TOKEN_LEN="${PPO_MAX_TOKEN_LEN:-$((MAX_PROMPT_LENGTH + MAX_RESPONSE_LENGTH + 2048))}"
 
 # Data and GRPO sampling: TRAIN_BATCH_SIZE questions per step, GROUP_SIZE answers each.
-# Training samples at temperature 1 with no top-p/top-k, so the rollout distribution is
-# the policy the actor computes logprobs for; validation uses Qwen3's thinking defaults.
+# Sampling goes through rLLM's rollout config, rllm.rollout.train / rllm.rollout.val.
+# Defaults: training at temperature 1 with no top-p/top-k/penalty, so the rollout
+# distribution is exactly the policy the actor computes logprobs for (temperature is
+# applied on both sides; top-p, top-k, min-p and penalties change only the sampler);
+# validation with Qwen3's thinking defaults. TRAIN_* / VAL_* override each. rLLM's verl
+# engine takes temperature, top_p and top_k from here; min_p and presence_penalty reach
+# vLLM through the workflow (train_grpo.py, extra_sampling_params).
 DATA=(
   rllm.data.train_batch_size="${TRAIN_BATCH_SIZE:-8}"
   rllm.data.max_prompt_length="${MAX_PROMPT_LENGTH}"
@@ -117,11 +122,16 @@ DATA=(
   rllm.data.seed="${SEED:-42}"
   rllm.rollout.n="${GROUP_SIZE:-8}"
   rllm.rollout.n_val=1
-  rllm.rollout.train.temperature=1.0
-  rllm.rollout.train.top_p=1.0
-  rllm.rollout.val.temperature=0.6
-  rllm.rollout.val.top_p=0.95
-  +rllm.rollout.val.top_k=20
+  rllm.rollout.train.temperature="${TRAIN_TEMPERATURE:-1.0}"
+  rllm.rollout.train.top_p="${TRAIN_TOP_P:-1.0}"
+  +rllm.rollout.train.top_k="${TRAIN_TOP_K:--1}"
+  +rllm.rollout.train.min_p="${TRAIN_MIN_P:-0.0}"
+  +rllm.rollout.train.presence_penalty="${TRAIN_PRESENCE_PENALTY:-0.0}"
+  rllm.rollout.val.temperature="${VAL_TEMPERATURE:-0.6}"
+  rllm.rollout.val.top_p="${VAL_TOP_P:-0.95}"
+  +rllm.rollout.val.top_k="${VAL_TOP_K:-20}"
+  +rllm.rollout.val.min_p="${VAL_MIN_P:-0.0}"
+  +rllm.rollout.val.presence_penalty="${VAL_PRESENCE_PENALTY:-0.0}"
   rllm.workflow.raise_on_error=false
 )
 

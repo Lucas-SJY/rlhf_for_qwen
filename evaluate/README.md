@@ -13,13 +13,14 @@ is also scored with Hugging Face Math-Verify and the LLM judge (see Scoring).
 | image | the SFT training image (`context-comp-sft:latest`: torch 2.9.1, transformers 5.15) |
 | dataset | `HuggingFaceH4/MATH-500`, split `test`, all 500 problems |
 | prompt | `Return your final response within \boxed{}.` + problem, chat template, thinking on |
-| decoding | greedy (`temperature 0`), batch 6, at most 12,288 new tokens, seed 42 |
+| decoding | there greedy (`temperature 0`); **here by default GRPO training's sampling** (temperature 0.6, top-p 0.95, top-k 20, min-p 0, presence penalty 1.0), `EVAL_TEMPERATURE=0` for greedy; both batch 6, at most 12,288 new tokens, seed 42 |
 | string scorer | only the answer after `</think>`, its last `\boxed{}`, LaTeX normalisation + numeric fallback (`accuracy`, `accuracy_string`) |
 | LLM judge | `qwen3-small` on NRP's gateway, on the rows the string scorer rejected (`accuracy_judge`) |
 | hardware | one RTX A6000 (default), 32Gi |
 
-Batched greedy generation is not invariant to batch size or GPU type, so those are kept
-too by default. `EVAL_GPU_TYPE=l40` runs on an L40 / L40S (also 48 GB) when no A6000 is
+To compare with the SFT baseline exactly, run with `EVAL_TEMPERATURE=0` (greedy, as
+there): batched greedy generation is not invariant to batch size or GPU type, so those are
+kept too. `EVAL_GPU_TYPE=l40` runs on an L40 / L40S (also 48 GB) when no A6000 is
 free; the scores can then differ slightly from the baseline's for numerical reasons. The
 Job requests one CPU core by default (`EVAL_CPU=1000` millicores; `../train` used 4) with
 a limit of 1.2 x the request, NRP's maximum: generation is GPU-bound, and 48 GB nodes
@@ -75,11 +76,15 @@ fetched results.
   export EVAL_SUITE="ByteDance-Seed/BeyondAIME||test;KbsdJames/Omni-MATH||test;RUC-AIBOX/OlymMATH|en-hard|test;MathArena/hmmt_feb_2025||train;MathArena/hmmt_feb_2026||train;math-ai/aime25||test;MathArena/aime_2026||train"
   ./evaluate/run_eval.sh submit      # later, with the same variables: fetch
   ```
-- `EVAL_TEMPERATURE` / `EVAL_TOP_P` / `EVAL_TOP_K` change the decoding (default greedy, as
-  the baseline). Greedy decoding sends Qwen3's thinking mode into repetition loops (40 of
-  the 104 cut-off answers of the run above); Qwen3 recommends temperature 0.6, top-p 0.95,
-  top-k 20, e.g. with `EVAL_RUN_NAME=qwen3-8b-sft-v3-t0.6` so the results sit beside the
-  greedy ones. One sample per problem, so a 20-problem score is noisy.
+- `EVAL_TEMPERATURE` / `EVAL_TOP_P` / `EVAL_TOP_K` / `EVAL_MIN_P` / `EVAL_PRESENCE_PENALTY`
+  set the decoding. The default is GRPO training's sampling since V2 (0.6 / 0.95 / 20 / 0 /
+  1.0), and the default result name then ends in `-t0.6-pp1.0`, so sampled and greedy
+  results never overwrite each other; `EVAL_TEMPERATURE=0` is greedy, the baseline's.
+  Greedy decoding sends Qwen3's thinking mode into repetition loops (40 of the 104 cut-off
+  answers of the run above, 3 % once sampled). transformers has no presence penalty, so
+  `eval_math500.py` adds vLLM's (`PresencePenalty`: every token already generated loses
+  the penalty from its logit, once, before temperature and top-k/top-p/min-p). One sample
+  per problem, so a 20-problem score is noisy.
 - `EVAL_RUN_NAME` overrides the result directory name.
 - The other subcommands are those of `../../train/evaluate/run_eval.sh`: `code`, `submit`,
   `logs`, `status`, `fetch`, `clean`; plus `score`.

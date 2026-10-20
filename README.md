@@ -276,11 +276,12 @@ copies the results to `answers/<RUN_NAME>/` (gitignored):
 
 ## MATH-500 evaluation
 
-[`evaluate/`](evaluate/README.md) generates MATH-500 answers with a GRPO export exactly as
-`../train/evaluate` did for the SFT checkpoints (same scripts, image, prompt, greedy
-decoding, batch size and card), and scores every run three ways: the string scorer
-(compares directly with the SFT v3 baseline's 0.814), Hugging Face Math-Verify (baseline
-0.852) and the LLM judge (baseline 0.846):
+[`evaluate/`](evaluate/README.md) generates MATH-500 answers with a GRPO export as
+`../train/evaluate` did for the SFT checkpoints (same scripts, image, prompt, batch size
+and card), by default with GRPO training's sampling (temperature 0.6, top-p 0.95, top-k
+20, min-p 0, presence penalty 1.0; `EVAL_TEMPERATURE=0` for the baseline's greedy
+decoding), and scores every run three ways: the string scorer (greedy SFT v3 baseline
+0.814), Hugging Face Math-Verify (0.852) and the LLM judge (0.846):
 
 ```bash
 EVAL_MODEL=/grpo/runs/<run>/export/global_step_<N> ./evaluate/run_eval.sh submit

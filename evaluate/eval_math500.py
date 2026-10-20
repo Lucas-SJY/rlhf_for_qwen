@@ -38,7 +38,7 @@ from pathlib import Path
 
 import torch
 from datasets import load_dataset
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, LogitsProcessor, LogitsProcessorList
 
 # The training prompts all started with this sentence, so evaluation has to use it too;
 # a different instruction would measure a different distribution than the one trained on.
@@ -74,6 +74,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--top-k", type=int, default=env("EVAL_TOP_K", 0),
                    help="top-k sampling, used only when temperature > 0 (0 = off); Qwen3's "
                         "thinking-mode recommendation is temperature 0.6, top-p 0.95, top-k 20")
+    p.add_argument("--min-p", type=float, default=env("EVAL_MIN_P", 0.0),
+                   help="min-p sampling, used only when temperature > 0 (0 = off)")
+    p.add_argument("--presence-penalty", type=float, default=env("EVAL_PRESENCE_PENALTY", 0.0),
+                   help="vLLM's presence penalty: every token already generated loses this much "
+                        "logit, once; used only when temperature > 0 (0 = off)")
     p.add_argument("--temperature", type=float, default=env("EVAL_TEMPERATURE", 0.0),
                    help="0 means greedy, which keeps the run reproducible")
     p.add_argument("--enable-thinking", default=env("EVAL_ENABLE_THINKING", "true"),
@@ -167,6 +172,28 @@ def split_answer(text: str) -> tuple[str, str, bool]:
         thought, _, answer = text.partition("</think>")
         return thought, answer, True
     return text, "", False
+
+
+class PresencePenalty(LogitsProcessor):
+    """vLLM's presence_penalty for transformers' generate, which has none of its own.
+
+    Subtracts `penalty` from the logit of every token that already occurs in the generated
+    part of the sequence (not the prompt), once however often it occurs. generate applies
+    custom processors before temperature, top-k, top-p and min-p, as vLLM applies its
+    penalties to the raw logits.
+    """
+
+    def __init__(self, penalty: float, prompt_length: int):
+        self.penalty = penalty
+        self.prompt_length = prompt_length
+
+    def __call__(self, input_ids, scores):
+        generated = input_ids[:, self.prompt_length:]
+        if generated.shape[1] == 0:
+            return scores
+        seen = torch.zeros_like(scores, dtype=torch.bool)
+        seen.scatter_(1, generated, True)
+        return scores - self.penalty * seen.to(scores.dtype)
 
 
 def row_id(row: dict, index: int, split: str) -> str:
@@ -270,15 +297,21 @@ def evaluate(args, tokenizer, model, dataset: str, config: str, split: str, out_
         batch_prompts = prompts[start:start + args.batch_size]
         enc = tokenizer(batch_prompts, return_tensors="pt", padding=True, add_special_tokens=False).to(model.device)
 
+        sampling = {}
+        if args.temperature > 0:
+            # Explicit, so the checkpoint's generation_config defaults never apply.
+            sampling = {"top_p": args.top_p, "top_k": args.top_k, "min_p": args.min_p}
+            if args.presence_penalty:
+                sampling["logits_processor"] = LogitsProcessorList(
+                    [PresencePenalty(args.presence_penalty, enc["input_ids"].shape[1])])
         with torch.no_grad():
             out = model.generate(
                 **enc,
                 max_new_tokens=args.max_new_tokens,
                 do_sample=args.temperature > 0,
                 temperature=args.temperature if args.temperature > 0 else None,
-                # Explicit, so the checkpoint's generation_config defaults never apply.
-                **({"top_p": args.top_p, "top_k": args.top_k} if args.temperature > 0 else {}),
                 pad_token_id=tokenizer.pad_token_id,
+                **sampling,
             )
         generated = out[:, enc["input_ids"].shape[1]:]
 
@@ -345,7 +378,8 @@ def evaluate(args, tokenizer, model, dataset: str, config: str, split: str, out_
         "minutes": (time.time() - started) / 60,
         "max_new_tokens": args.max_new_tokens,
         "temperature": args.temperature,
-        **({"top_p": args.top_p, "top_k": args.top_k} if args.temperature > 0 else {}),
+        **({"top_p": args.top_p, "top_k": args.top_k, "min_p": args.min_p,
+            "presence_penalty": args.presence_penalty} if args.temperature > 0 else {}),
         "enable_thinking": enable_thinking,
     }
 

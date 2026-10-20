@@ -30,8 +30,10 @@
 # dataset's directory for a dataset other than MATH-500),
 # EVAL_LIMIT=20 makes a smoke test of the first 20 problems, and EVAL_GPU_TYPE picks the
 # card: a6000 (default, the SFT baseline's) or l40 (L40 / L40S, also 48 GB).
-# EVAL_TEMPERATURE / EVAL_TOP_P / EVAL_TOP_K set the decoding: default greedy (0), as the
-# baseline; Qwen3's thinking-mode recommendation is 0.6 / 0.95 / 20. EVAL_CPU is
+# EVAL_TEMPERATURE / EVAL_TOP_P / EVAL_TOP_K / EVAL_MIN_P / EVAL_PRESENCE_PENALTY set the
+# decoding: by default that of GRPO training (0.6 / 0.95 / 20 / 0 / 1.0), with
+# -t<T>[-pp<P>] appended to the default result name; EVAL_TEMPERATURE=0 is greedy, as the
+# SFT baseline. EVAL_CPU is
 # the CPU request in millicores (default 1000); the limit is 1.2 x that, NRP's maximum.
 #
 # Reads ../.env for IMAGE, K8S_NAMESPACE, RUN_NAME and RL_PVC_NAME but never writes to
@@ -72,10 +74,27 @@ dataset_dir_name() {
   printf '%s' "${name}"
 }
 
+# Decoding: by default the sampling of GRPO training since V2 (rllm.rollout.*): Qwen3's
+# thinking-mode temperature 0.6, top-p 0.95, top-k 20, min-p 0, and a presence penalty of
+# 1.0. EVAL_TEMPERATURE=0 is greedy, the SFT baseline's decoding in ../../train/evaluate.
+EVAL_TEMPERATURE="${EVAL_TEMPERATURE:-0.6}"
+EVAL_TOP_P="${EVAL_TOP_P:-0.95}"
+EVAL_TOP_K="${EVAL_TOP_K:-20}"
+EVAL_MIN_P="${EVAL_MIN_P:-0}"
+EVAL_PRESENCE_PENALTY="${EVAL_PRESENCE_PENALTY:-1.0}"
+sampled() { awk -v t="${EVAL_TEMPERATURE}" 'BEGIN { exit !(t + 0 > 0) }'; }
+
 if [ -z "${EVAL_RUN_NAME:-}" ]; then
   # /grpo/runs/<run>/export/global_step_<N> -> <run>-global_step_<N>; the script's own
   # default (the directory name) would make every run's results collide.
   EVAL_RUN_NAME="$(printf '%s' "${EVAL_MODEL%/}" | sed -E 's#^.*/runs/([^/]+)/export/(global_step_[0-9]+)$#\1-\2#; s#^.*/##')"
+  # Sampled results get the decoding in their name, so they never overwrite greedy ones.
+  if sampled; then
+    EVAL_RUN_NAME="${EVAL_RUN_NAME}-t${EVAL_TEMPERATURE}"
+    if awk -v p="${EVAL_PRESENCE_PENALTY}" 'BEGIN { exit !(p + 0 != 0) }'; then
+      EVAL_RUN_NAME="${EVAL_RUN_NAME}-pp${EVAL_PRESENCE_PENALTY}"
+    fi
+  fi
   if [ -z "${EVAL_SUITE}" ] && [ "${EVAL_DATASET}" != "HuggingFaceH4/MATH-500" ]; then
     EVAL_RUN_NAME="$(dataset_dir_name "${EVAL_DATASET}" "${EVAL_DATASET_CONFIG}")/${EVAL_RUN_NAME}"
   fi
@@ -97,9 +116,6 @@ result_dirs() {
   done
 }
 EVAL_LIMIT="${EVAL_LIMIT:-0}"
-EVAL_TEMPERATURE="${EVAL_TEMPERATURE:-0}"
-EVAL_TOP_P="${EVAL_TOP_P:-1.0}"
-EVAL_TOP_K="${EVAL_TOP_K:-0}"
 EVAL_GPU_TYPE="${EVAL_GPU_TYPE:-a6000}"
 case "${EVAL_GPU_TYPE}" in
   a6000) EVAL_GPU_RESOURCE=nvidia.com/rtxa6000 EVAL_GPU_PRODUCTS="[NVIDIA-RTX-A6000]" ;;
@@ -134,6 +150,8 @@ step_submit() {
       -e "s|\${EVAL_TEMPERATURE}|${EVAL_TEMPERATURE}|g" \
       -e "s|\${EVAL_TOP_P}|${EVAL_TOP_P}|g" \
       -e "s|\${EVAL_TOP_K}|${EVAL_TOP_K}|g" \
+      -e "s|\${EVAL_MIN_P}|${EVAL_MIN_P}|g" \
+      -e "s|\${EVAL_PRESENCE_PENALTY}|${EVAL_PRESENCE_PENALTY}|g" \
       -e "s|\${EVAL_DATASET}|${EVAL_DATASET}|g" \
       -e "s|\${EVAL_DATASET_CONFIG}|${EVAL_DATASET_CONFIG}|g" \
       -e "s#\${EVAL_SUITE}#${EVAL_SUITE}#g" \

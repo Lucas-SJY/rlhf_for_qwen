@@ -80,13 +80,18 @@ spec:
               value: expandable_segments:True
             - name: PYTORCH_ALLOC_CONF
               value: expandable_segments:True
-            # 0 = greedy (the baseline's); > 0 samples with EVAL_TOP_P / EVAL_TOP_K.
+            # 0 = greedy (the SFT baseline's); > 0 samples with EVAL_TOP_P / TOP_K / MIN_P and
+            # EVAL_PRESENCE_PENALTY (run_eval.sh's default: GRPO training's 0.6 / 0.95 / 20 / 0 / 1.0).
             - name: EVAL_TEMPERATURE
               value: "${EVAL_TEMPERATURE}"
             - name: EVAL_TOP_P
               value: "${EVAL_TOP_P}"
             - name: EVAL_TOP_K
               value: "${EVAL_TOP_K}"
+            - name: EVAL_MIN_P
+              value: "${EVAL_MIN_P}"
+            - name: EVAL_PRESENCE_PENALTY
+              value: "${EVAL_PRESENCE_PENALTY}"
             # 0 runs all 500; EVAL_LIMIT=20 ./evaluate/run_eval.sh for a smoke test.
             - name: EVAL_LIMIT
               value: "${EVAL_LIMIT}"

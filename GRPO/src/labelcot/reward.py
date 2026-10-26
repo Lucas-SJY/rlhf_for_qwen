@@ -25,6 +25,17 @@ When the reference answer cannot be checked automatically (prose, proofs, code),
 correctness term is dropped and the reward is the label term alone, so it stays in
 [0, 1] either way.
 
+The two terms are logged separately (reward_label + reward_correct = reward, over the
+answers that get a reward), next to answer_correct (every checkable answer, a cut-off one
+counting as wrong) and answer_correct_finished (the checkable answers that were not cut off).
+
+A thought stuck on one step type, a run of paragraphs that all open with the same label
+(repeated_label_run below), makes the workflow stop the completion and sample it again;
+that is a rule of the workflow as well, not a reward term.
+
+Every answer is also checked for a repetition loop at its end (loop_label below, logged as
+loop, loop_partial and loop_among_cut, not rewarded).
+
 Stdlib only apart from math_verify (Hugging Face), so it can be unit-tested on a laptop
 without torch or rLLM. Without math_verify (Python < 3.10) the answer check falls back to
 the string matcher alone; the image always has it.
@@ -34,6 +45,7 @@ from __future__ import annotations
 
 import re
 import threading
+import zlib
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from fractions import Fraction
@@ -109,6 +121,17 @@ class RewardBreakdown:
     label_counts: dict[str, int] = field(default_factory=dict)
     # Regenerations the workflow needed before the completion had no invalid tag.
     label_retries: int = 0
+    # Completions the workflow stopped and sampled again for a repeated-label run, the
+    # tokens those discarded attempts had generated, and whether the kept completion still
+    # has such a run (the last attempt is never stopped).
+    repeat_retries: int = 0
+    repeat_discarded_tokens: int = 0
+    repeat_in_final: bool = False
+    # The two parts of the reward: label_reward + correct_reward = reward.
+    label_reward: float = 0.0
+    correct_reward: float = 0.0
+    # How the answer ends (loop_label): "loop", "partial" or "none".
+    loop: str = "none"
 
     def metrics(self) -> dict[str, float]:
         """Flat float metrics for rLLM's per-episode logging (averaged per batch)."""
@@ -120,18 +143,31 @@ class RewardBreakdown:
             "invented_tag_rate": self.invented_tag_rate,
             "invalid_label": float(self.invented_tag_rate > 0),
             "label_retries": float(self.label_retries),
+            "repeat_retries": float(self.repeat_retries),
+            "repeat_discarded_tokens": float(self.repeat_discarded_tokens),
+            "repeat_in_final": float(self.repeat_in_final),
             "label_valid": float(self.label_valid),
             "label_mix": self.label_mix,
             "answer_checkable": float(self.answer_checkable),
+            "loop": float(self.loop == "loop"),
+            "loop_partial": float(self.loop == "partial"),
         }
+        # Reported for cut-off answers only, so the batch mean is the share of them that loop.
+        if self.truncated:
+            out["loop_among_cut"] = float(self.loop == "loop")
         # A cut-off completion is dropped from training, so its placeholder reward would
         # only drag the logged mean down.
         if not self.truncated:
             out["reward"] = self.reward
+            out["reward_label"] = self.label_reward
+            out["reward_correct"] = self.correct_reward
         # Only reported where it means something, so the batch mean is accuracy on
-        # checkable questions rather than being diluted by prose answers.
+        # checkable questions rather than being diluted by prose answers. answer_correct
+        # counts a cut-off answer as wrong; answer_correct_finished leaves those out.
         if self.answer_checkable:
             out["answer_correct"] = float(self.answer_correct)
+            if not self.truncated:
+                out["answer_correct_finished"] = float(self.answer_correct)
         total = sum(self.label_counts.values())
         if total:
             for label in LABELS:
@@ -192,6 +228,72 @@ def parse_step_labels(thought: str) -> tuple[list[str | None], int]:
     """
     labels, invalid = _scan_labels(thought)
     return labels, len(invalid)
+
+
+def _compression_ratio(text: str) -> float:
+    data = text.encode()
+    return len(zlib.compress(data)) / max(1, len(data))
+
+
+def loop_label(text: str) -> str:
+    """How an answer ends: "loop" (it repeats itself), "partial" (it circles, or enumerates
+    case after case) or "none".
+
+    Normal reasoning compresses to about 0.3 of its size; a verbatim loop to well under 0.12.
+    loop: the last 6,000 characters compress below 0.12, repeat one paragraph 5+ times or keep
+    under 30 % distinct lines, or the last 2,000 characters compress below 0.15 (a loop that
+    started late). partial: the looser versions (0.2, 3+, 60 %), the last 2,000 characters
+    below 0.25, or 20 %+ of the closing 12-word runs already written earlier in the answer.
+    Calibrated on V3's validation answers: no finished answer compressed its last 2,000
+    characters below 0.24.
+    """
+    tail = text[-6000:]
+    paragraphs = [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\n\s*\n", tail) if p.strip()][-30:]
+    top = Counter(paragraphs).most_common(1)[0][1] if paragraphs else 0
+    lines = [line.strip() for line in tail.splitlines() if line.strip()][-60:]
+    distinct = len(set(lines)) / max(1, len(lines))
+    ratio, ratio_end = _compression_ratio(tail), _compression_ratio(text[-2000:])
+    if ratio < 0.12 or top >= 5 or distinct < 0.3 or ratio_end < 0.15:
+        return "loop"
+    words = text.split()
+    start = max(12, len(words) - len(tail.split()))
+    seen = {tuple(words[i:i + 12]) for i in range(0, start - 11)}
+    grams = [tuple(words[i:i + 12]) for i in range(start, len(words) - 11)]
+    repeated = 0
+    for gram in grams:
+        repeated += gram in seen
+        seen.add(gram)
+    if ratio < 0.2 or top >= 3 or distinct < 0.6 or ratio_end < 0.25 or (grams and repeated / len(grams) >= 0.2):
+        return "partial"
+    return "none"
+
+
+def repeated_label_run(thought: str, count_tokens, min_paragraphs: int = 3,
+                       min_tokens: int = 200) -> tuple[str, int, int] | None:
+    """The first run of at least min_paragraphs consecutive paragraphs opening with the same
+    label whose paragraphs together exceed min_tokens tokens, as (label, paragraphs, tokens).
+
+    count_tokens(text) gives a paragraph's length in tokens (the workflow passes the policy's
+    tokenizer). An untagged paragraph, or one with a tag outside the eight labels, ends a run.
+    The last paragraph may still be unfinished; its tokens only add to a run. None when no
+    run qualifies.
+    """
+    run_label, run_paragraphs, run_tokens = None, 0, 0
+    for paragraph in _PARAGRAPH_SPLIT.split(thought):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        name = _opening_tag(paragraph)
+        label = name if name in _LABEL_SET else None
+        if label is not None and label == run_label:
+            run_paragraphs += 1
+            run_tokens += count_tokens(paragraph)
+        else:
+            run_label = label
+            run_paragraphs, run_tokens = (1, count_tokens(paragraph)) if label is not None else (0, 0)
+        if run_label is not None and run_paragraphs >= min_paragraphs and run_tokens > min_tokens:
+            return run_label, run_paragraphs, run_tokens
+    return None
 
 
 def invalid_labels(text: str) -> list[str]:
@@ -411,17 +513,20 @@ def score_completion(text: str, task: dict, truncated: bool, weights: RewardWeig
     checkable = answer_is_checkable(gold)
     correct = bool(closed and checkable and answer_is_correct(answer, gold))
 
+    label_term = correct_term = 0.0
     if truncated:
         # Placeholder: the trainer masks length-truncated episodes out of the batch, so
         # this value never reaches an advantage (MASK_TRUNCATED=false trains it as 0).
-        reward = 0.0
+        pass
     elif not closed:
-        reward = 0.0
+        pass
     elif checkable:
-        reward = w.label * float(label_valid) + w.correct * float(correct)
+        label_term = w.label * float(label_valid)
+        correct_term = w.correct * float(correct)
     else:
         # No correctness term: the label term alone, which keeps R in [0, 1].
-        reward = float(label_valid) if w.label > 0 else 0.0
+        label_term = float(label_valid) if w.label > 0 else 0.0
+    reward = label_term + correct_term
 
     return RewardBreakdown(
         reward=float(reward),
@@ -435,4 +540,7 @@ def score_completion(text: str, task: dict, truncated: bool, weights: RewardWeig
         answer_checkable=checkable,
         answer_correct=correct,
         label_counts=dict(Counter(tagged)),
+        label_reward=float(label_term),
+        correct_reward=float(correct_term),
+        loop=loop_label(text),
     )

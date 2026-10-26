@@ -18,6 +18,7 @@ GRPO/data/
 /evaluate/results/
 # Rollout counts fetched by evaluate/rollout_stats.sh
 /eval-results/
+/GRPO/train_monitor/
 
 __pycache__/
 *.py[cod]

@@ -135,6 +135,25 @@ STATS_MODE=val ./evaluate/rollout_stats.sh           # the validation rollouts
   scheduled onto that node, where the PVC can be mounted twice.
 - Reading runs at the PVC's speed: ~9 min for V1's 25,600 rollouts (~1 GB).
 
+## Trajectories of a training run
+
+`sync_trajectories.sh` downloads every rollout a run has written so far, training and
+validation, from the RL PVC to `eval-results/trajectories/<run>/` (gitignored): one
+directory per step (`train_step_<N>_epoch_0/`, `val_step_<N>_epoch_0/`) with one JSON
+file per rollout (full response, reward breakdown, metrics) and `batch_summary.json`.
+
+```bash
+./evaluate/sync_trajectories.sh           # RUN_NAME from ../.env
+./evaluate/sync_trajectories.sh <run>     # another run on the PVC
+```
+
+- It takes whatever is there: a step the run is still writing is copied as far as it has
+  got and copied again on the next call; complete steps already here are skipped, so it
+  can be run any time, during or after training.
+- A busybox pod mounts the PVC read-only (on the training pod's node while one holds the
+  ReadWriteOnce PVC) and is deleted afterwards. V3's 136 step directories (18,962
+  rollouts) take 1.4 GB.
+
 ## Output
 
 As in `../../train/evaluate`: `summary.json` (accuracy, token statistics, breakdown by

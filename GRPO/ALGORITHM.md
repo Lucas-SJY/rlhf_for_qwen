@@ -48,7 +48,11 @@ With `B = 8` questions per step and group size `G = 16`:
    checkpoint's chat template in thinking mode and ending at `<|im_start|>assistant\n`.
 2. **Roll out.** vLLM generates **16 independent answers per question**, 128 in total, at
    temperature 1.0 with no top-p/top-k and at most 8,192 new tokens. An answer with an
-   invalid tag is regenerated (up to 3 times, §4.3).
+   invalid tag is regenerated (up to 3 times, §4.3). From V4, a training answer whose
+   thought gets stuck on one step type (3 consecutive paragraphs with the same label,
+   over 200 tokens together) is stopped while it is written and sampled again, up to 2
+   times; a third attempt that still has such a run is dropped from training like a
+   cut-off answer (§5.2).
 3. **Score.** `score_completion` turns each answer into a scalar reward `R` (section 4).
 4. **Group.** The 128 answers are grouped by question id: 8 groups of 16. Answers cut off
    at the 8,192-token limit are dropped here (rLLM's compact filtering): they get no
@@ -275,11 +279,22 @@ Per answer, averaged per step as `batch/<name>` (training) and `val/rest_grpo/<n
 
 - `reward` (over the answers that are trained on, i.e. without the cut-off ones),
   `closed_think`, `truncated`;
+- `reward_label` and `reward_correct`: the two terms of `reward` (w_label · label_valid and
+  w_correct · answer_correct, both 0 for an answer that never closes its thought), over
+  the same answers, so the two add up to `reward`;
 - `n_steps`, `tag_rate`, `invented_tag_rate`;
 - `label_retries` (regenerations this answer needed) and `invalid_label` (1 if it still had
   an invalid tag after the last retry);
+- from V4, `repeat_retries` (attempts stopped for a repeated-label run),
+  `repeat_discarded_tokens` (tokens those attempts had generated) and `repeat_in_final` (1 if
+  the kept answer still has such a run);
+- from V4, `loop` / `loop_partial` (1 if the answer ends in a repetition loop / partly
+  repeats, `loop_label`) and `loop_among_cut` (the same flag, reported for cut-off answers
+  only, so its batch mean is the share of them that loop);
 - `label_valid` and `label_mix`;
-- `answer_checkable`, and `answer_correct` (checkable questions only);
+- `answer_checkable`, and `answer_correct` (checkable questions only; a cut-off answer
+  counts as wrong) and `answer_correct_finished` (the checkable answers that were not cut
+  off);
 - `share_<label>` for each of the 8 labels: the generated label mix.
 
 rLLM additionally logs `reward/policy/{mean,std,min,max}` and
@@ -290,6 +305,27 @@ differ, are all high, are all low),
 answers trained on) and `batch/termination_reason/max_response_length_exceeded`. An
 episode counts as correct (`is_correct`, which feeds `val/rest_grpo/pass@1`) only when
 `answer_correct` is true.
+
+From V4, five wandb sections gather what to watch per training step, one line chart per
+key (`labelcot/patches.py`, copied at the end of each step):
+
+- `reward_breakdown/{total,format,correctness}`: `batch/reward`, `batch/reward_label`,
+  `batch/reward_correct`, over the answers not cut off (format + correctness = total);
+- `rollout_accuracy/{all,finished}`: `batch/answer_correct` (a cut-off answer counting as
+  wrong) and `batch/answer_correct_finished`;
+- `rollout_length/{rollouts,cut_off_count,cut_off_share,mean_tokens,max_tokens,min_tokens}`:
+  rollouts generated, how many and what share hit the response limit (`batch/truncated`
+  times the rollouts), and verl's `response_length/*` over every rollout, a cut-off one
+  counting at the limit (verl's own `response_length/clip_ratio` stays at 0 and is not used);
+- `loop/{loop,partial,among_cut_off}`: `batch/loop`, `batch/loop_partial`,
+  `batch/loop_among_cut` (`labelcot.reward.loop_label`, the rules of the V3 loop analyses);
+- `retry/{repeat_retries,repeat_discarded_tokens,repeat_in_final,label_retries,masked}`;
+  `masked` is the share of rollouts dropped because their last attempt still had a
+  repeated-label run (`batch/termination_reason/max_turns_exceeded`).
+
+Validation gets the per-answer ones as `val/omni_math/<name>`. They replace the companion
+monitor Job V3 ran beside the trainer (logging to a wandb run `<run>-monitor`, since
+removed); V3's own run has none of them.
 
 ## 5. Hyperparameters
 
@@ -310,72 +346,87 @@ from the previous one in bold; "same" means as in the previous column.
 - **V3** (run `qwen3-8b-v3-full-offload-2gpu-omni-math-V3`) is V2 with 12,288 response
   tokens instead of 8,192 (the MATH-500 evaluation budget), started again from the SFT
   checkpoint.
+- **V4** (not run yet) is V3 with a retry for answers stuck on one step type: during
+  training, a run of at least 3 consecutive paragraphs opening with the same label, over
+  200 tokens together, stops the answer while it is generated, and it is sampled again up
+  to 2 times; a last attempt that still has such a run is dropped from training like a
+  cut-off answer (it ends as `max_turns_exceeded`, which compact filtering masks; the
+  single-turn workflow has no other use for that reason). On V3's steps 100 to 125 this
+  rule would have stopped 9 % of the answers (6 % of the right ones, 13 % of the cut-off
+  ones), mostly runs of `[reflecting]`. Answers are generated in 1,024-token chunks for it,
+  so vLLM's presence penalty covers only the current chunk. Response tokens stay at 12,288;
+  the micro-batch drops from 32,768 to 16,384 tokens per GPU, halving the activation memory
+  (V3 peaked at 53.4 GB allocated per GPU). With CPUOffloadPolicy each micro-batch pays ~40 s
+  to stream the weights in and the gradients out, and V3's actor update already took 729 s of
+  its 1,410 s step, so twice as many micro-batches should add roughly 700 s per step.
+  Checkpoints every 5 steps instead of 10, since V3 lost 9 steps to a preemption.
 
 ### 5.1 Model and data
 
-| setting | V1 | V2 | V3 | config key (env var) |
-|---|---|---|---|---|
-| starting checkpoint | `Lucas-SJY/qwen3-8b-sft-bespoke` @ `v3` (commit `e24173c`), downloaded once into `HF_HOME` on the RL PVC | same | same | `actor_rollout_ref.model.path` (`POLICY_MODEL_PATH`, `POLICY_MODEL_REVISION`) |
-| what is trained | all parameters (no LoRA) | same | same | `actor_rollout_ref.model.lora_rank` (`LORA_RANK=0`) |
-| reference policy (KL) | a separate frozen copy of the SFT checkpoint, CPU-offloaded | same | same | `actor_rollout_ref.ref.*` |
-| train / validation tasks | `GRPO/data/rest_grpo/`, 4,776 / 526 (math 4,560 / 495, science 216 / 31) | **`GRPO/data/omni_math/`, 3,153 / 350: Omni-MATH without its first 20 problems and without uncheckable or multi-value answers** | same | `TRAIN_FILE` / `VAL_FILE` |
-| held out, never trained on | `no_answer/` (no checkable answer), `manual_inspection/` (10 questions) | **Omni-MATH's first 20 problems (the evaluation slice), 781 uncheckable and 124 multi-value answers** | same | `src/prepare_rest_grpo.py` (V1), `src/prepare_omni_math.py` (V2) |
-| prompt | the task's user turn, the checkpoint's chat template, thinking on | same (`Return your final response within \boxed{}.` + the problem) | same | `src/labelcot/workflow.py` |
-| max prompt / response tokens | 2,048 / 8,192 | same | 2,048 / **12,288** | `rllm.data.max_prompt_length` / `max_response_length` (`MAX_PROMPT_LENGTH`, `MAX_RESPONSE_LENGTH`) |
-| seed | 42 | same | same | `rllm.data.seed` (`SEED`) |
+| setting | V1 | V2 | V3 | V4 | config key (env var) |
+|---|---|---|---|---|---|
+| starting checkpoint | `Lucas-SJY/qwen3-8b-sft-bespoke` @ `v3` (commit `e24173c`), downloaded once into `HF_HOME` on the RL PVC | same | same | same | `actor_rollout_ref.model.path` (`POLICY_MODEL_PATH`, `POLICY_MODEL_REVISION`) |
+| what is trained | all parameters (no LoRA) | same | same | same | `actor_rollout_ref.model.lora_rank` (`LORA_RANK=0`) |
+| reference policy (KL) | a separate frozen copy of the SFT checkpoint, CPU-offloaded | same | same | same | `actor_rollout_ref.ref.*` |
+| train / validation tasks | `GRPO/data/rest_grpo/`, 4,776 / 526 (math 4,560 / 495, science 216 / 31) | **`GRPO/data/omni_math/`, 3,153 / 350: Omni-MATH without its first 20 problems and without uncheckable or multi-value answers** | same | same | `TRAIN_FILE` / `VAL_FILE` |
+| held out, never trained on | `no_answer/` (no checkable answer), `manual_inspection/` (10 questions) | **Omni-MATH's first 20 problems (the evaluation slice), 781 uncheckable and 124 multi-value answers** | same | same | `src/prepare_rest_grpo.py` (V1), `src/prepare_omni_math.py` (V2) |
+| prompt | the task's user turn, the checkpoint's chat template, thinking on | same (`Return your final response within \boxed{}.` + the problem) | same | same | `src/labelcot/workflow.py` |
+| max prompt / response tokens | 2,048 / 8,192 | same | 2,048 / **12,288** | same | `rllm.data.max_prompt_length` / `max_response_length` (`MAX_PROMPT_LENGTH`, `MAX_RESPONSE_LENGTH`) |
+| seed | 42 | same | same | same | `rllm.data.seed` (`SEED`) |
 
 ### 5.2 Sampling and reward
 
-| setting | V1 | V2 | V3 | config key (env var) |
-|---|---|---|---|---|
-| questions per step | 8 | same | same | `rllm.data.train_batch_size` (`TRAIN_BATCH_SIZE`) |
-| answers per question (group size) | 16 | same | same | `rllm.rollout.n` (`GROUP_SIZE`) |
-| answers per step | 128 | same | same | |
-| train sampling | T 1.0, top-p 1.0, top-k off | **T 0.6, top-p 0.95, top-k 20, min-p 0, presence penalty 1.0** | same | `rllm.rollout.train.*` (`TRAIN_TEMPERATURE`, `TRAIN_TOP_P`, `TRAIN_TOP_K`, `TRAIN_MIN_P`, `TRAIN_PRESENCE_PENALTY`) |
-| validation sampling | 1 answer, T 0.6, top-p 0.95, top-k 20 | 1 answer, T 0.6, top-p 0.95, top-k 20, **min-p 0, presence penalty 1.0** | same | `rllm.rollout.val.*` (`VAL_*`, as for training), `rllm.rollout.n_val` |
-| reward | 0.2 · label_valid + 0.8 · answer_correct | same | same | `REWARD_W_LABEL` / `REWARD_W_CORRECT` |
-| regenerations for an invalid tag | up to 3 | same | same | `MAX_LABEL_RETRIES` |
-| answers cut off at the response limit | dropped from training, as are failed or timed-out episodes; validation counts them as wrong | same | same, at **12,288** tokens | `rllm.compact_filtering.*` (`MASK_TRUNCATED=true`) |
+| setting | V1 | V2 | V3 | V4 | config key (env var) |
+|---|---|---|---|---|---|
+| questions per step | 8 | same | same | same | `rllm.data.train_batch_size` (`TRAIN_BATCH_SIZE`) |
+| answers per question (group size) | 16 | same | same | same | `rllm.rollout.n` (`GROUP_SIZE`) |
+| answers per step | 128 | same | same | same | |
+| train sampling | T 1.0, top-p 1.0, top-k off | **T 0.6, top-p 0.95, top-k 20, min-p 0, presence penalty 1.0** | same | same, but **the presence penalty covers only the current 1,024-token chunk** | `rllm.rollout.train.*` (`TRAIN_TEMPERATURE`, `TRAIN_TOP_P`, `TRAIN_TOP_K`, `TRAIN_MIN_P`, `TRAIN_PRESENCE_PENALTY`) |
+| validation sampling | 1 answer, T 0.6, top-p 0.95, top-k 20 | 1 answer, T 0.6, top-p 0.95, top-k 20, **min-p 0, presence penalty 1.0** | same | same | `rllm.rollout.val.*` (`VAL_*`, as for training), `rllm.rollout.n_val` |
+| reward | 0.2 · label_valid + 0.8 · answer_correct | same | same | same | `REWARD_W_LABEL` / `REWARD_W_CORRECT` |
+| regenerations for an invalid tag | up to 3 | same | same | same | `MAX_LABEL_RETRIES` |
+| regenerations for a repeated-label run | none | same | same | **training only: 3+ consecutive paragraphs with one label, over 200 tokens together, stop the answer (checked after every 1,024-token chunk); up to 2 new attempts; a last attempt that still has a run is dropped from training like a cut-off answer** | `src/labelcot/workflow.py` (`REPEAT_LABEL_RETRIES`, `REPEAT_MIN_PARAGRAPHS`, `REPEAT_MIN_TOKENS`, `GEN_CHUNK_TOKENS`, `REPEAT_MASK_FINAL`), `rllm.compact_filtering.mask_max_turns_exceeded` |
+| answers cut off at the response limit | dropped from training, as are failed or timed-out episodes; validation counts them as wrong | same | same, at **12,288** tokens | same | `rllm.compact_filtering.*` (`MASK_TRUNCATED=true`) |
 
 ### 5.3 Objective and optimizer
 
-| setting | V1 | V2 | V3 | config key (env var) |
-|---|---|---|---|---|
-| advantage | GRPO, std-normalised per group | same | same | `rllm.algorithm.adv_estimator`, `norm_adv_by_std_in_grpo` (`NORM_ADV_BY_STD=true`) |
-| clip ε_low / ε_high, dual clip c | 0.2 / 0.28, 3.0 | same | same | `rllm.algorithm.eps_clip` / `eps_clip_high` (`CLIP_LOW` / `CLIP_HIGH`), `actor.clip_ratio_c` |
-| loss aggregation, entropy bonus | token-mean, 0 | same | same | `rllm.algorithm.loss_agg_mode`, `actor.entropy_coeff` |
-| KL to the reference | k3 (`low_var_kl`) in the loss, β 0.01 | same | same | `rllm.algorithm.kl_beta` (`KL_BETA`), `actor.kl_loss_type` |
-| learning rate | 2e-6 | same | same | `actor_rollout_ref.actor.optim.lr` (`ACTOR_LR`) |
-| schedule | constant, no warmup | same | same | verl defaults |
-| optimizer | AdamW, β (0.9, 0.999), weight decay 0.01, gradient clipping at norm 1.0 | same | same | verl defaults |
-| questions per optimizer update / updates per step | 4 / 2 | same | same | `actor.ppo_mini_batch_size` (`PPO_MINI_BATCH_SIZE`) |
-| epochs over each batch | 1 | same | same | `actor.ppo_epochs` |
+| setting | V1 | V2 | V3 | V4 | config key (env var) |
+|---|---|---|---|---|---|
+| advantage | GRPO, std-normalised per group | same | same | same | `rllm.algorithm.adv_estimator`, `norm_adv_by_std_in_grpo` (`NORM_ADV_BY_STD=true`) |
+| clip ε_low / ε_high, dual clip c | 0.2 / 0.28, 3.0 | same | same | same | `rllm.algorithm.eps_clip` / `eps_clip_high` (`CLIP_LOW` / `CLIP_HIGH`), `actor.clip_ratio_c` |
+| loss aggregation, entropy bonus | token-mean, 0 | same | same | same | `rllm.algorithm.loss_agg_mode`, `actor.entropy_coeff` |
+| KL to the reference | k3 (`low_var_kl`) in the loss, β 0.01 | same | same | same | `rllm.algorithm.kl_beta` (`KL_BETA`), `actor.kl_loss_type` |
+| learning rate | 2e-6 | same | same | same | `actor_rollout_ref.actor.optim.lr` (`ACTOR_LR`) |
+| schedule | constant, no warmup | same | same | same | verl defaults |
+| optimizer | AdamW, β (0.9, 0.999), weight decay 0.01, gradient clipping at norm 1.0 | same | same | same | verl defaults |
+| questions per optimizer update / updates per step | 4 / 2 | same | same | same | `actor.ppo_mini_batch_size` (`PPO_MINI_BATCH_SIZE`) |
+| epochs over each batch | 1 | same | same | same | `actor.ppo_epochs` |
 
 ### 5.4 Compute
 
-| setting | V1 | V2 | V3 | config key (env var) |
-|---|---|---|---|---|
-| GPUs | 2 × A100-80GB on one node, normal priority | same | same | `trainer.n_gpus_per_node` (`N_GPUS`, `GPU_TYPE`, `GPU_PRIORITY_CLASS`) |
-| sharding / offload | FSDP2 with CPUOffloadPolicy: weights, gradients and Adam state stay in pinned host RAM; each layer is copied to the GPU only while it is computed; Adam steps on the CPU | same | same | `actor.strategy=fsdp2`, `fsdp_config.offload_policy=True` (`FSDP_CPU_OFFLOAD=true`) |
-| precision | fp32 master weights, bf16 compute | same | same | verl defaults |
-| tokens per micro-batch per GPU (update and log-prob passes), dynamic batching | 32,768 | same | same | `actor.ppo_max_token_len_per_gpu`, `*.log_prob_max_token_len_per_gpu` (`PPO_MAX_TOKEN_LEN`) |
-| gradient checkpointing, padding removal | on, on | same | same | `actor_rollout_ref.model.*` |
-| vLLM | one replica per GPU, tensor parallel 1, async, asleep (level 2) while the actor trains | same | same | `actor_rollout_ref.rollout.*` |
-| vLLM share of the GPU while generating | 0.8 | same | same | `rollout.gpu_memory_utilization` (`ROLLOUT_GPU_MEM_UTIL`) |
-| CPU threads per training worker (CPU Adam) | 9 | same | same | `OMP_NUM_THREADS` |
-| pod | 20 CPU, 288Gi RAM, 24Gi `/dev/shm` | same | same | `POD_CPU`, `POD_MEMORY`, `k8s/job.yaml` |
-| Ray object store | 16 GB | same | same | `RAY_OBJECT_STORE_GB` |
-| image patch | verl's `save_checkpoint` does not move CPUOffloadPolicy weights to the GPU (it crashed otherwise) | same | same | `docker/patch_verl.py` |
+| setting | V1 | V2 | V3 | V4 | config key (env var) |
+|---|---|---|---|---|---|
+| GPUs | 2 × A100-80GB on one node, normal priority | same | same | same | `trainer.n_gpus_per_node` (`N_GPUS`, `GPU_TYPE`, `GPU_PRIORITY_CLASS`) |
+| sharding / offload | FSDP2 with CPUOffloadPolicy: weights, gradients and Adam state stay in pinned host RAM; each layer is copied to the GPU only while it is computed; Adam steps on the CPU | same | same | same | `actor.strategy=fsdp2`, `fsdp_config.offload_policy=True` (`FSDP_CPU_OFFLOAD=true`) |
+| precision | fp32 master weights, bf16 compute | same | same | same | verl defaults |
+| tokens per micro-batch per GPU (update and log-prob passes), dynamic batching | 32,768 | same | same | **16,384** (the longest rollout, 2,048 + 12,288 tokens, still fits one) | `actor.ppo_max_token_len_per_gpu`, `*.log_prob_max_token_len_per_gpu` (`PPO_MAX_TOKEN_LEN`) |
+| gradient checkpointing, padding removal | on, on | same | same | same | `actor_rollout_ref.model.*` |
+| vLLM | one replica per GPU, tensor parallel 1, async, asleep (level 2) while the actor trains | same | same | same | `actor_rollout_ref.rollout.*` |
+| vLLM share of the GPU while generating | 0.8 | same | same | same | `rollout.gpu_memory_utilization` (`ROLLOUT_GPU_MEM_UTIL`) |
+| CPU threads per training worker (CPU Adam) | 9 | same | same | same | `OMP_NUM_THREADS` |
+| pod | 20 CPU, 288Gi RAM, 24Gi `/dev/shm` | same | same | same | `POD_CPU`, `POD_MEMORY`, `k8s/job.yaml` |
+| Ray object store | 16 GB | same | same | same | `RAY_OBJECT_STORE_GB` |
+| image patch | verl's `save_checkpoint` does not move CPUOffloadPolicy weights to the GPU (it crashed otherwise) | same | same | same | `docker/patch_verl.py` |
 
 ### 5.5 Schedule and checkpoints
 
-| setting | V1 | V2 | V3 | config key (env var) |
-|---|---|---|---|---|
-| steps, epochs | 200 (1,600 questions, a third of the training set), 1 | 200 (1,600 questions, half of the training set), 1 | same | `rllm.trainer.total_batches` (`TOTAL_TRAINING_STEPS`), `total_epochs` (`EPOCHS`) |
-| validation | at step 0, every 20 steps, at the end | same | same | `rllm.trainer.test_freq` (`TEST_FREQ`), `val_before_train` (`VAL_BEFORE_TRAIN`) |
-| checkpoint every | 10 steps (+ the last step) | same | same | `rllm.trainer.save_freq` (`SAVE_FREQ`) |
-| checkpoint contents | model + extra, no Adam state (~33 GB; a resumed run restarts Adam's moments) | same | same | `actor.checkpoint.save_contents` (`CKPT_SAVE_OPTIMIZER=false`) |
-| checkpoints kept | the latest only (the previous one is deleted after the next is written) | same | same | `trainer.max_actor_ckpt_to_keep=1` |
+| setting | V1 | V2 | V3 | V4 | config key (env var) |
+|---|---|---|---|---|---|
+| steps, epochs | 200 (1,600 questions, a third of the training set), 1 | 200 (1,600 questions, half of the training set), 1 | same | same | `rllm.trainer.total_batches` (`TOTAL_TRAINING_STEPS`), `total_epochs` (`EPOCHS`) |
+| validation | at step 0, every 20 steps, at the end | same | same | same | `rllm.trainer.test_freq` (`TEST_FREQ`), `val_before_train` (`VAL_BEFORE_TRAIN`) |
+| checkpoint every | 10 steps (+ the last step) | same | same | **5 steps** (+ the last step), so a preempted run loses at most 4 steps | `rllm.trainer.save_freq` (`SAVE_FREQ`) |
+| checkpoint contents | model + extra, no Adam state (~33 GB; a resumed run restarts Adam's moments) | same | same | same | `actor.checkpoint.save_contents` (`CKPT_SAVE_OPTIMIZER=false`) |
+| checkpoints kept | the latest only (the previous one is deleted after the next is written) | same | same | same | `trainer.max_actor_ckpt_to_keep=1` |
 
 ### 5.6 Evaluation after training
 

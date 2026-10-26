@@ -52,6 +52,22 @@ def extra_sampling_params(config) -> dict[str, dict]:
             for mode in ("train", "val")}
 
 
+def repeat_label_args_from_env() -> dict[str, int]:
+    """The repeated-label retry (labelcot.workflow): a run of REPEAT_MIN_PARAGRAPHS consecutive
+    paragraphs with the same label, over REPEAT_MIN_TOKENS tokens, stops a training completion,
+    which is sampled again up to REPEAT_LABEL_RETRIES times (0 turns it off); completions are
+    generated in chunks of GEN_CHUNK_TOKENS tokens so the run is caught while it is written.
+    REPEAT_MASK_FINAL=true drops a last attempt that still has a run from training."""
+    return {
+        "repeat_label_retries": int(os.environ.get("REPEAT_LABEL_RETRIES", "2")),
+        "repeat_min_paragraphs": int(os.environ.get("REPEAT_MIN_PARAGRAPHS", "3")),
+        "repeat_min_tokens": int(os.environ.get("REPEAT_MIN_TOKENS", "200")),
+        "gen_chunk_tokens": int(os.environ.get("GEN_CHUNK_TOKENS", "1024")),
+        # Drop a last attempt that still has a run from training (entrypoint.sh masks it).
+        "repeat_mask_final": os.environ.get("REPEAT_MASK_FINAL", "true").lower() == "true",
+    }
+
+
 def load_tasks(path: str) -> list[dict]:
     with open(path) as f:
         return [json.loads(line) for line in f if line.strip()]
@@ -86,11 +102,13 @@ def main(config) -> None:
     print(f"[train_grpo] reward weights: {weights}")
     extra_sampling = extra_sampling_params(config)
     print(f"[train_grpo] sampling params beyond temperature / top_p / top_k: {extra_sampling}")
+    repeat_args = repeat_label_args_from_env()
+    print(f"[train_grpo] repeated-label retry: {repeat_args}")
 
     trainer = AgentTrainer(
         workflow_class=LabeledCoTWorkflow,
         workflow_args={"reward_weights": weights, "max_label_retries": int(os.environ.get("MAX_LABEL_RETRIES", "3")),
-                       "extra_sampling": extra_sampling},
+                       "extra_sampling": extra_sampling, **repeat_args},
         config=config,
         train_dataset=train,
         val_dataset=val,

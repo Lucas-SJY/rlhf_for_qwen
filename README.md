@@ -289,6 +289,10 @@ EVAL_MODEL=/grpo/runs/<run>/export/global_step_<N> ./evaluate/run_eval.sh fetch
 #   -> evaluate/results/<run>-global_step_<N>/ (gitignored), scored
 ```
 
+`./evaluate/sync_trajectories.sh [run]` downloads every rollout trajectory the run has
+written so far to `eval-results/trajectories/<run>/`; see
+[evaluate/README.md](evaluate/README.md#trajectories-of-a-training-run).
+
 `./evaluate/rollout_stats.sh` counts a run's training rollouts per question (how many of
 the 16 were correct or cut off) from the episode logs on the PVC; see
 [evaluate/README.md](evaluate/README.md#rollout-outcomes-of-a-training-run).
@@ -302,11 +306,16 @@ smoke test). Every step logs about 140 metrics; these are the ones to watch:
 |---|---|
 | `batch/reward`, `reward/policy/mean` | mean reward of the step's answers, without the ones cut off at the length limit (those are not trained on) |
 | `val/bespoke_labeled_cot/reward`, `val/bespoke_labeled_cot/pass@1` | reward and accuracy on the 102 held-out questions (step 0, every `TEST_FREQ` steps, end) |
+| `reward_breakdown/total`, `reward_breakdown/format`, `reward_breakdown/correctness` | the step's mean reward and its two terms (0.2·label_valid and 0.8·answer_correct), over the answers not cut off; format + correctness = total |
+| `rollout_accuracy/all`, `rollout_accuracy/finished` | share of the step's rollouts with a right final answer: all of them (a cut-off one counts as wrong), and only those that finished within the length limit |
 | `batch/answer_correct`, `batch/label_valid`, `batch/truncated` | the reward terms, and how often answers hit the length limit |
 | `groups/num_trajs_before_filter`, `groups/num_trajs_after_filter` | answers generated in the step, and how many are left for training once the cut-off ones are dropped |
 | `batch/label_mix`, `batch/share_<label>` | how the label shares compare with the average annotated trace (logged only) |
 | `batch/tag_rate`, `batch/invented_tag_rate` | share of paragraphs with a valid tag, and with a made-up one (logged only, not rewarded) |
 | `batch/label_retries`, `batch/invalid_label` | regenerations per answer because of a tag outside the eight labels, and the share still invalid after the last retry |
+| `rollout_length/cut_off_count`, `rollout_length/cut_off_share`, `rollout_length/mean_tokens`, `rollout_length/max_tokens` | from V4: how many of the step's rollouts hit the response limit, their share, and the mean and longest rollout in tokens (a cut-off rollout counting at the limit) |
+| `loop/loop`, `loop/partial`, `loop/among_cut_off` | from V4: share of answers ending in a repetition loop, partly repeating, and loops among the cut-off answers |
+| `retry/repeat_retries`, `retry/repeat_discarded_tokens`, `retry/repeat_in_final`, `retry/masked` | from V4: attempts per answer stopped for a run of 3+ paragraphs with the same label (over 200 tokens), the tokens those attempts had generated, the share of last attempts that still have such a run, and the share of rollouts dropped from training for it |
 | `batch/policy/fractions/effective` | share of questions whose 8 answers got different rewards; only these produce a gradient |
 | `actor/ppo_kl`, `actor/pg_clipfrac`, `actor/entropy` | update size and policy entropy |
 | `perf/max_memory_allocated_gb`, `timing_s/step` | GPU memory peak and seconds per step |

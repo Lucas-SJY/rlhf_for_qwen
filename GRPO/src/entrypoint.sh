@@ -141,10 +141,18 @@ DATA=(
 # The rest of its group is trained as usual; a step whose answers are all cut off is
 # skipped. Failed episodes (errors, timeouts) are dropped as well. Validation still counts
 # a cut-off answer as wrong. MASK_TRUNCATED=false trains on them with reward 0 again.
-if [ "${MASK_TRUNCATED:-true}" = "true" ]; then
+# A training answer that still has a repeated-label run after the last regeneration
+# (src/labelcot/workflow.py, REPEAT_MASK_FINAL) ends as max_turns_exceeded, a reason this
+# single-turn workflow never produces otherwise, and is dropped the same way.
+MASK_REPEATED="false"
+if [ "${REPEAT_MASK_FINAL:-true}" = "true" ] && [ "${REPEAT_LABEL_RETRIES:-2}" -gt 0 ]; then
+  MASK_REPEATED="true"
+fi
+if [ "${MASK_TRUNCATED:-true}" = "true" ] || [ "${MASK_REPEATED}" = "true" ]; then
   DATA+=(
     rllm.compact_filtering.enable=true
-    rllm.compact_filtering.mask_max_response_length_exceeded=true
+    rllm.compact_filtering.mask_max_response_length_exceeded="${MASK_TRUNCATED:-true}"
+    rllm.compact_filtering.mask_max_turns_exceeded="${MASK_REPEATED}"
   )
 fi
 
